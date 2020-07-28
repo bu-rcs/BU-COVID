@@ -1,6 +1,6 @@
 # BU-COVID Modeling
 ## Insight on the Relative Impact of Proposed Interventions for a Large University in an Urban Environment
-**Katia Bulekova<sup>1</sup>, Brian Gregor<sup>1</sup>, Eric D. Kolaczyk<sup>2</sup>, Wenrui Li<sup>3</sup>, Laura White<sup>4</sup>**
+**Katia Bulekova<sup>1</sup>, Brian Gregor<sup>1</sup>, Eric D. Kolaczyk<sup>2,3</sup>, Wenrui Li<sup>3</sup>, Laura White<sup>4</sup>**
  
 
 * <sup>1</sup> Research Computing Services, IS&T, Boston University
