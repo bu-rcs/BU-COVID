@@ -16,5 +16,5 @@ As with most institutions of higher learning world-wide, Boston University's goa
 
 To check out this repository use:
 
-git clone --recurse-submodules https://github.com/bu-rcs/BU-COVID.git
+git clone https://github.com/bu-rcs/BU-COVID.git
 

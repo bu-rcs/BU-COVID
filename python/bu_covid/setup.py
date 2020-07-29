@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 
 from setuptools import setup
-import os
-
 
 # This will install the bu_covid code along with covasim 1.4.7 
 # from PyPI and all necessary additional libraries.
 
- 
  
 setup(name='bu_covid',
       version='1.0',
