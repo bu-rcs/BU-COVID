@@ -1,0 +1,127 @@
+library(Matrix)
+library(igraph)
+library(dplyr)
+
+
+buildGraph <- function ( net.matrix ) {
+  
+  NumOfStudents <- nrow(net.matrix)
+  NumOfGroups <- ncol(net.matrix)
+  Net <- vector("list", NumOfGroups)
+  names(Net) <- colnames(net.matrix)
+  Net[1:NumOfGroups] <- list(rsparsematrix(NumOfStudents,NumOfStudents,0))
+  Size <- colSums(net.matrix)
+  
+  for (i in 1:NumOfGroups) {
+    if( Size[i] > 1 )
+    {
+      nonzero_entry <- which(net.matrix[,i]>0 )
+      Net[[i]][nonzero_entry,nonzero_entry] <- 1 - diag(length(nonzero_entry))
+    }
+  }
+  
+  graph <- Reduce("+",Net)
+  graph <- graph_from_adjacency_matrix(graph,mode = "undirected",weighted = TRUE,diag = FALSE)
+  vertex_attr(graph, "full_info_id") <- row.names(net.matrix)
+  graph
+}
+
+# output path
+output_path = "../Data/networks/"
+
+# the maximum number of students per a household
+# baseline - number of students per bathroom
+# 10 as intervention
+dorm_df <- read.csv("../Data/input/housing_info.csv", 
+                      stringsAsFactors = FALSE)
+
+
+dorm_df <- read.csv("/restricted/project/bucovid/katia/BU-COVID/Data/input/housing_info.csv", 
+                      stringsAsFactors = FALSE)
+
+##---------------------
+## Baseline household
+##---------------------
+## household can be defined by the group of students using the same bathroom
+household <- dorm_df %>%
+  group_by(buildingID, floor) %>%
+  mutate(householdID = paste(buildingID, floor, (room - 1) %% 2 + 1, sep="_") ) %>%   # 2 households per floor
+  mutate(smallHouseholdID = paste(buildingID, floor, ( room - 1 ) %% 5 + 1, sep="_") ) %>%   # 5 households per floor
+  ungroup() %>% arrange(householdID, smallHouseholdID)
+           
+## construct sparse matrix for the baseline household
+net.matrix <- household %>%
+  select(studentID, householdID) %>%
+  table() %>%
+  as.data.frame.matrix() %>%
+  as.matrix() %>%
+  as("sparseMatrix")
+
+graph <- buildGraph(net.matrix)
+write_graph(graph,
+            paste0( output_path, "HouseholdNet_baseline.graphml"),"graphml" )
+
+
+
+##---------------------
+## Intervention (use smaller household)
+##---------------------
+net.matrix <- household %>%
+  select(studentID, smallHouseholdID) %>%
+  table() %>%
+  as.data.frame.matrix() %>%
+  as.matrix() %>%
+  as("sparseMatrix")
+
+
+graph <- buildGraph(net.matrix)
+write_graph(graph,
+            paste0( output_path, "HouseholdNet_10.graphml"),"graphml" )
+
+
+#-------------------------------------
+#
+# Construct room network
+#
+#-------------------------------------
+
+net.matrix <- household %>%
+  mutate( roomID = paste(buildingID, room, sep="_")) %>%
+  select(studentID, roomID) %>%
+  table() %>%
+  as.data.frame.matrix() %>%
+  as.matrix() %>%
+  as("sparseMatrix")
+
+
+graph <- buildGraph(net.matrix)
+write_graph(graph,
+            paste0( output_path, "RoomNet.graphml"),"graphml" )
+
+#-------------------------------------
+#
+# Construct floor network
+#
+#-------------------------------------
+
+
+net.matrix <- household %>%
+  mutate( floorID = paste(buildingID, floor, sep="_")) %>%
+  select(studentID, floorID) %>%
+  table() %>%
+  as.data.frame.matrix() %>%
+  as.matrix() %>%
+  as("sparseMatrix")
+
+
+graph <- buildGraph(net.matrix)
+write_graph(graph,
+            paste0( output_path, "FloorNet.graphml"),"graphml" )
+
+
+
+#--------------------------------------------------
+#
+# Construct "friends" network inside the building
+#
+#--------------------------------------------------
