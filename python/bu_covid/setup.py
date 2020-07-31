@@ -14,7 +14,7 @@ setup(name='bu_covid',
       url='https://github.com/bu-rcs/BU-COVID',
       packages=['bu_covid', ],
       package_dir={'bu_covid': 'src'},
-      install_requires=['covasim==1.4.7',],
+      install_requires=['covasim==1.5.0','python-igraph'],
 )
 
  

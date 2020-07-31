@@ -14,7 +14,7 @@ import datetime
 from .misc import make_dt, get_daynum
 
 __all__=['test_post_quar', 'gen_periodic_testing_interventions','gen_large_dorm_testing_interventions',
-         'test_household_when_pos','pulsed_infections_network','gen_undegrad_testing_interventions','contact_tracing_sens_spec']
+         'test_household_when_pos','pulsed_infections_network','gen_undergrad_testing_interventions','contact_tracing_sens_spec']
 
 class test_post_quar(cv.Intervention):
     '''
@@ -443,7 +443,7 @@ class pulsed_infections_network(cv.Intervention):
         
 
 # Test undergrad every test_period_large days. Everyone else is tested every test_period days.     
-def gen_undegrad_testing_interventions(BU_pop, num_days, test_period_large = 3,  test_period=7, **kwargs):
+def gen_undergrad_testing_interventions(BU_pop, num_days, test_period_large = 3,  test_period=7, **kwargs):
     ''' Test undergrad every test_period_large days.
         Everyone else is tested every test_period days.
         
@@ -456,8 +456,8 @@ def gen_undegrad_testing_interventions(BU_pop, num_days, test_period_large = 3, 
         Returns: A list of cv.test_num interventions
     '''
     # Split the uids into 2 populations - in larger dorms and out of them
-    uids_large = BU_pop['uid'][np.where(BU_pop['undegrad'] > 0)].copy()
-    uids_other = BU_pop['uid'][np.where(BU_pop['undegrad'] < 1)].copy()
+    uids_large = BU_pop['uid'][np.where(BU_pop['undergrad'] > 0)].copy()
+    uids_other = BU_pop['uid'][np.where(BU_pop['undergrad'] < 1)].copy()
     # shuffle 'em up
     np.random.shuffle(uids_large)
     np.random.shuffle(uids_other)
