@@ -1,3 +1,16 @@
+## ---------------------------
+##
+## Generate classroom networks
+##
+## Authors: Katia Bulekova, Wenrui Li
+##          Boston University
+##
+## Date Created: 2020-07-31
+##
+## Email: ktrn@bu.edu
+##
+## ----------------------------
+
 library(Matrix)
 suppressMessages( library(igraph) )
 suppressMessages( library(dplyr) )
