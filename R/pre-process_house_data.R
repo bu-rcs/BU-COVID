@@ -36,9 +36,6 @@ dorm_df <- read.csv("../Data/input/housing_info.csv",
                       stringsAsFactors = FALSE)
 
 
-dorm_df <- read.csv("/restricted/project/bucovid/katia/BU-COVID/Data/input/housing_info.csv", 
-                      stringsAsFactors = FALSE)
-
 ##---------------------
 ## Baseline household
 ##---------------------
@@ -125,3 +122,60 @@ write_graph(graph,
 # Construct "friends" network inside the building
 #
 #--------------------------------------------------
+friends <- function(rowID, roomV, StudentV){
+  
+  
+  out <- lapply(rowID, function(x){
+    # remove roomates and yourself
+    rommates <-  which(roomV == roomV[x])
+    net = StudentV[-rommates]
+    
+    if(length(net) > 2) {
+      group <- sample(net, 3) 
+    } else if (length(net) > 1)  {
+      group <- c( sample(net, 2), NA)
+      
+    } else if (length(net) == 1)  {
+      group <- c( net[1], NA, NA)
+    } else {
+      group <- c(NA, NA, NA)
+    }
+    group
+    
+  } )
+  out
+}
+
+# Assign a bathroom ID to a student based on a number of floorbaths
+set.seed(42)
+
+friends.df <- household %>%
+  group_by( buildingID ) %>%
+  mutate( friends = friends(row_number(), room, studentID) ) %>%
+  ungroup() %>% tidyr:: separate(friends, into = c(NA, "f1", "f2", "f3")) %>%
+  mutate(f1 = as.numeric(f1), f2 = as.numeric(f2), f3 = as.numeric(f3)) %>%
+  select(studentID, f1, f2, f3) %>% mutate(vid = row_number()) 
+
+
+friends.df$fr1 = sapply(friends.df$f1, 
+                        function(x)friends.df$vid[which(x == friends.df$studentID)])
+friends.df$fr2 = sapply(friends.df$f2, 
+                        function(x)if(!is.na(x))friends.df$vid[which(x == friends.df$studentID)] else NA)
+friends.df$fr3 = sapply(friends.df$f3, 
+                        function(x)if(!is.na(x))friends.df$vid[which(x == friends.df$studentID)] else NA)
+
+g <- make_empty_graph(directed = FALSE) + 
+  vertices(friends.df$vid) 
+
+vertex_attr(g, "full_info_id") <- friends.df$studentID
+
+
+edges_list1 <- as.vector( t(na.omit(cbind(friends.df$vid, friends.df$fr1))))
+edges_list2 <- as.vector( t(na.omit(cbind(friends.df$vid, friends.df$fr2))))
+edges_list3 <- as.vector( t(na.omit(cbind(friends.df$vid, friends.df$fr3))))
+
+#add edges
+g <- g + edges( c(edges_list1, edges_list2, edges_list3) )
+write_graph(g,
+            paste0("networks/Building_net.graphml"),"graphml" )
+
