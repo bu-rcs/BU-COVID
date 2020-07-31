@@ -1,25 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Jun 18 12:40:29 2020
 
-@author: bgregor
-"""
-
-''' To run on the SCC...
-
- source /rprojectnb/bucovid/Covasim/sourceme.sh
- 
- python /rprojectnb/bucovid/brian/code/graphml/run_multisim_baseline.py
-
-
-ADDS The intervention for people self-reporting themselves and getting tested. Line 218.
-
-'''
-
-
-#%%
-
+## ---------------------------
+##
+## Example of a baseline (no interventions) simulation.
+##
+## Authors: Brian Gregor, Wenrui Li 
+##          Boston University
+##
+## Date Created: 2020-07-31
+##
+## Email: bgregor@bu.edu
+##
+## ---------------------------
 
 
 import matplotlib
@@ -44,11 +37,11 @@ import bu_covid as bu
 
 
 # Location of classroom networks
-net_dir = '/rprojectnb/bucovid/Networks'
+net_dir = '../../Data/networks'  
 # Location of housing networks
-hnet_dir = '/rprojectnb/bucovid/Networks'
+hnet_dir = '../../Data/networks'  
 # Location of pop_info.csv
-pop_info_path = '/rprojectnb/bucovid/Data/pop_info.csv'
+pop_info_path = '../../Data/input/pop_info.csv'
 
 # Name of this simulation for output files:
 sim_name = 'baseline'
@@ -65,7 +58,7 @@ sim_name = 'baseline'
 # ============================================================================= 
 
 # Set a destination for plots and graphml files
-plot_dir = '/rprojectnb/bucovid/wenrui/Covasim/result'
+plot_dir = '../../Data/networks/results/baseline'
 if 'PLOT_DIR' in os.environ:  
     plot_dir = os.environ['PLOT_DIR']
 
@@ -77,6 +70,11 @@ if 'N_SIM_RUNS' in os.environ:
 n_imports=1
 if 'N_IMPORTS' in os.environ:
     n_imports = int(os.environ['N_IMPORTS'])
+
+# Base transmission rate
+beta_val = 0.02
+if 'BETA_val' in os.environ:
+    beta_roommate = os.environ['BETA_val']
     
 beta_roommate = 0.7
 if 'BETA_roommate' in os.environ:
@@ -107,10 +105,7 @@ class_files = ['ClassNetworkU.graphml',
                'ClassNetworkS.graphml',
                ]
 graphs = [Graph.Read_GraphML(os.path.join(net_dir, cf)) for cf in class_files]
-#if not bu.validate_graphs(graphs):
-#    raise Exception('Graph vertices do not match!  Exiting.')
-    
-    
+   
 class_layer_names = ['sun','mon','tue','wed','thu','fri','sat']     
 class_contacts = bu.get_all_class_contacts_dicts(graphs, class_layer_names, 3)
 
@@ -152,18 +147,12 @@ end_day = '2020-12-19'
 # Total number of simulation days
 num_days = (bu.make_dt(end_day) - bu.make_dt(start_day)).days
 
-# The population size
+# Get the pop size from the number of vertices in any of the graphs (they're all the same)
 pop_size=BU_pop['uid'].shape[0]
 
-beta_val = 0.02
-
-
-    
-# Set up simulation parameters.  Get the pop size from the number of 
-# vertices in any of the graphs (they're all the same)
+# Set up simulation parameters.  
 pars = dict(pop_size = pop_size,
-            #pop_infected = int(round(pop_size*0.0025)), # Initial number of infected people
-            pop_infected = 0, 
+            pop_infected = 0,     # Start with nobody infected. 
             beta = beta_val,      # Base transmission rate
             start_day = start_day,
             end_day = end_day,
@@ -171,46 +160,51 @@ pars = dict(pop_size = pop_size,
             n_imports=n_imports) # n_imports - average spontaneous infections per day.
 
 
-
-
 #%% =============================================================================
 #     INTERVENTIONS    
 # =============================================================================
 
-
-base_interventions = [] 
+# Our list of interventions.
+interventions = [] 
 
 
 # Set up varied beta per layer intervention
-#  This is for platoons.
 beta_layer = {}
+# There is no change in beta for classrooms here, so the
+# multiplier is 1.
 for key in class_contacts:
     beta_layer[key] = 1
+    
+# Adjust for housing layers to reflect living together.
 beta_layer['roommate'] = beta_roommate/beta_val,
 beta_layer['household'] = beta_household/beta_val,
 beta_layer['floor'] = beta_floor/beta_val,
 beta_layer['building'] = beta_household/beta_val
-for key in beta_layer:
-    base_interventions.append(cv.change_beta(days=0, changes=beta_layer[key], layers=key))
 
-# On class days turn on the class networks and reduce on non-class days.
+# Add to the list of interventions so these will be applied.
+for key in beta_layer:
+    interventions.append(cv.change_beta(days=0, changes=beta_layer[key], layers=key))
+
+# On class days turn on the class networks and off on non-class days.
+# Add as covasim clip_edges interventions.
 class_interventions = []
 for day_num, day in enumerate(class_layer_names):
     # In the layer_contact_lists find a matching day name
     for key in class_contacts:
         if key.find(day) >= 0:
+            # [1.0,0.0] - this is a multiplier: 1.0 when there's class, 0 where there isn't.
+            # The second number could be altered if students interact on non-class days.
             class_interventions.append(bu.gen_daily_interventions(start_day,end_day,[key],[day_num,],[1.0,0.0],cv.clip_edges))
+# and add the class schedule to our main intervention list.
+interventions += class_interventions 
 
-base_interventions += class_interventions 
-
-
-interventions = base_interventions.copy()
 
 verbose = False # keep the simulations quiet
 if n_runs == 1:
     verbose = True  #unles there's just 1.
 
 #%% Create the list of daily snapshot objects
+# These track numerous statistics. See get_BU_snapshots() for details.
 analyzers = bu.get_BU_snapshots(num_days)
 
 #%%
@@ -220,9 +214,17 @@ sim=cv.Sim(pars=pars, popfile=BU_pop, verbose = verbose, load_pop = True,
 bu.update_sim_people(sim,BU_pop)
 #%%
 
+# Covasim uses the sciris library for parallelization, which provides a wrapper 
+# on top of python.multiprocessing.  We were getting memory errors when running
+# on 16+ cores simultaneously so we have a custom parallelization implemented
+# here. It has been tested without issues on a 64-core system.
+# get_n_cores() --> get the number of cores to run on.  Please read the docstring
+# for this function to see how to use it.
 sims_complete = bu.parallel_run_sims(sim, n_runs = n_runs, n_cores = bu.get_n_cores())
 
+# Add the list of completed sims to a MultiSim object.
 msim = cv.MultiSim(sims_complete)
+# Calculate statistics.
 msim.reduce()
 
 
@@ -235,27 +237,21 @@ infection_df=bu.infection_count_to_df(sims_complete)
 #%%
 diag2iso_df=bu.diag2iso_count_to_df(sims_complete)
 
-
 severe_df=bu.severe_count_to_df(sims_complete)
+
 critical_df=bu.critical_count_to_df(sims_complete)
+
 dead_df=bu.dead_count_to_df(sims_complete)
-#snapshots_df.plot(x="days", y=["n_res_quar", "n_res_diag","n_nonres_quar","n_nonres_diag"])
-#plt.show() 
+
 #%% And the simulation results dataframe.  
 sim_results_df = bu.sim_results_to_df(sims_complete)
-
-#%%  Example of making an age histogram
-#agehist = cv.age_histogram(sim=sims_complete[0])
-#agehist.plot()
-
-
-
-#%%
-
 
 # =============================================================================
 #  Output
 # =============================================================================
+
+# All the results are now in memory.  Write out the dataframes as CSV
+# files.  Generate one plot using Covasim and save it.
 
 print('Generating plots')
 
@@ -309,16 +305,6 @@ plots1 = sc.odict({
         })
 
 msim.plot(to_plot=plots1, show_args={'interventions':False},do_save=True,fig_path=os.path.join(plot_dir,'Sim_%s.png' % sim_name))
-plots2 = sc.odict({ 'R_eff':['r_eff'] })
-msim.plot(to_plot=plots2, show_args={'interventions':False},do_save=True,fig_path=os.path.join(plot_dir,'Sim_%s_Reff.png' % sim_name))
-
-
-
-#%%
-#print('Writing the graphml ZIP file')
-
-#bu.write_graphml(sims_complete, plot_dir, sim_name, BU_pop)
-
 
 
     
