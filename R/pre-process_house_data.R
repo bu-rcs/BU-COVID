@@ -3,67 +3,84 @@ library(igraph)
 library(dplyr)
 
 
-buildGraph <- function ( net.matrix ) {
+#' Create igraph object from a sparse matrix.
+#' 
+#' @param netMatrix sparse matrix defining relationship
+#' @return igraph graph object.
+#'
+buildGraph <- function ( netMatrix ) {
   
-  NumOfStudents <- nrow(net.matrix)
-  NumOfGroups <- ncol(net.matrix)
+  NumOfStudents <- nrow(netMatrix)
+  NumOfGroups <- ncol(netMatrix)
   Net <- vector("list", NumOfGroups)
-  names(Net) <- colnames(net.matrix)
-  Net[1:NumOfGroups] <- list(rsparsematrix(NumOfStudents,NumOfStudents,0))
-  Size <- colSums(net.matrix)
+  names(Net) <- colnames(netMatrix)
+  Net[1:NumOfGroups] <- list(rsparsematrix(NumOfStudents ,NumOfStudents, 0))
+  Size <- colSums(netMatrix)
   
-  for (i in 1:NumOfGroups) {
-    if( Size[i] > 1 )
-    {
-      nonzero_entry <- which(net.matrix[,i]>0 )
+  for ( i in seq_len(NumOfGroups) ) {
+    if( Size[i] > 1 ){
+      nonzero_entry <- which( netMatrix[,i] > 0 )
       Net[[i]][nonzero_entry,nonzero_entry] <- 1 - diag(length(nonzero_entry))
     }
   }
   
-  graph <- Reduce("+",Net)
-  graph <- graph_from_adjacency_matrix(graph,mode = "undirected",weighted = TRUE,diag = FALSE)
-  vertex_attr(graph, "full_info_id") <- row.names(net.matrix)
+  graph <- Reduce("+", Net)
+  graph <- graph_from_adjacency_matrix(graph,mode = "undirected",
+                                       weighted = TRUE,
+                                       diag = FALSE)
+  
+  vertex_attr(graph, "full_info_id") <- row.names(netMatrix)
   graph
 }
 
-# output path
+##=================================================================
+
+## output path
 output_path = "../Data/networks/"
 
-# the maximum number of students per a household
-# baseline - number of students per bathroom
-# 10 as intervention
+## the maximum number of students per a household
+## baseline - number of students per bathroom
+## 10 as intervention
 dorm_df <- read.csv("../Data/input/housing_info.csv", 
                       stringsAsFactors = FALSE)
 
 
-##---------------------
+## ---------------------
 ## Baseline household
-##---------------------
+## ---------------------
 ## household can be defined by the group of students using the same bathroom
 household <- dorm_df %>%
   group_by(buildingID, floor) %>%
-  mutate(householdID = paste(buildingID, floor, (room - 1) %% 2 + 1, sep="_") ) %>%   # 2 households per floor
-  mutate(smallHouseholdID = paste(buildingID, floor, ( room - 1 ) %% 5 + 1, sep="_") ) %>%   # 5 households per floor
+  mutate(householdID = 
+           paste(buildingID,
+                 floor, 
+                 (room - 1) %% 2 + 1, 
+                 sep="_") ) %>%   # 2 households per floor
+  mutate(smallHouseholdID = 
+           paste(buildingID, 
+                 floor, 
+                 (room - 1) %% 5 + 1, 
+                 sep="_") ) %>%   # 5 households per floor
   ungroup() %>% arrange(householdID, smallHouseholdID)
            
 ## construct sparse matrix for the baseline household
-net.matrix <- household %>%
+netMatrix <- household %>%
   select(studentID, householdID) %>%
   table() %>%
   as.data.frame.matrix() %>%
   as.matrix() %>%
   as("sparseMatrix")
 
-graph <- buildGraph(net.matrix)
+graph <- buildGraph(netMatrix)
 write_graph(graph,
             paste0( output_path, "HouseholdNet_baseline.graphml"),"graphml" )
 
 
 
-##---------------------
+## ------------------------------------
 ## Intervention (use smaller household)
-##---------------------
-net.matrix <- household %>%
+## ------------------------------------
+netMatrix <- household %>%
   select(studentID, smallHouseholdID) %>%
   table() %>%
   as.data.frame.matrix() %>%
@@ -71,18 +88,15 @@ net.matrix <- household %>%
   as("sparseMatrix")
 
 
-graph <- buildGraph(net.matrix)
+graph <- buildGraph(netMatrix)
 write_graph(graph,
             paste0( output_path, "HouseholdNet_10.graphml"),"graphml" )
 
 
-#-------------------------------------
-#
-# Construct room network
-#
-#-------------------------------------
-
-net.matrix <- household %>%
+## -------------------------------------
+## Construct room network
+## -------------------------------------
+netMatrix <- household %>%
   mutate( roomID = paste(buildingID, room, sep="_")) %>%
   select(studentID, roomID) %>%
   table() %>%
@@ -91,18 +105,14 @@ net.matrix <- household %>%
   as("sparseMatrix")
 
 
-graph <- buildGraph(net.matrix)
+graph <- buildGraph(netMatrix)
 write_graph(graph,
             paste0( output_path, "RoomNet.graphml"),"graphml" )
 
-#-------------------------------------
-#
-# Construct floor network
-#
-#-------------------------------------
-
-
-net.matrix <- household %>%
+## -------------------------------------
+## Construct floor network
+## -------------------------------------
+netMatrix <- household %>%
   mutate( floorID = paste(buildingID, floor, sep="_")) %>%
   select(studentID, floorID) %>%
   table() %>%
@@ -111,17 +121,13 @@ net.matrix <- household %>%
   as("sparseMatrix")
 
 
-graph <- buildGraph(net.matrix)
+graph <- buildGraph(netMatrix)
 write_graph(graph,
             paste0( output_path, "FloorNet.graphml"),"graphml" )
 
-
-
-#--------------------------------------------------
-#
-# Construct "friends" network inside the building
-#
-#--------------------------------------------------
+## --------------------------------------------------
+##  Construct "friends" network inside the building
+## --------------------------------------------------
 friends <- function(rowID, roomV, StudentV){
   
   
@@ -146,7 +152,7 @@ friends <- function(rowID, roomV, StudentV){
   out
 }
 
-# Assign a bathroom ID to a student based on a number of floorbaths
+## Assign a bathroom ID to a student based on a number of floorbaths
 set.seed(42)
 
 friends.df <- household %>%
