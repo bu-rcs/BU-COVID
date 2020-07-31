@@ -1,6 +1,6 @@
 library(Matrix)
-library(igraph)
-library(dplyr)
+suppressMessages( library(igraph) )
+suppressMessages( library(dplyr) )
 
 
 #' Create igraph object from a sparse matrix.
@@ -158,7 +158,9 @@ set.seed(42)
 friends.df <- household %>%
   group_by( buildingID ) %>%
   mutate( friends = friends(row_number(), room, studentID) ) %>%
-  ungroup() %>% tidyr:: separate(friends, into = c(NA, "f1", "f2", "f3")) %>%
+  ungroup() %>% tidyr:: separate(friends, 
+                                 into = c(NA, "f1", "f2", "f3"),
+                                 extra = "drop") %>%
   mutate(f1 = as.numeric(f1), f2 = as.numeric(f2), f3 = as.numeric(f3)) %>%
   select(studentID, f1, f2, f3) %>% mutate(vid = row_number()) 
 
@@ -183,5 +185,4 @@ edges_list3 <- as.vector( t(na.omit(cbind(friends.df$vid, friends.df$fr3))))
 #add edges
 g <- g + edges( c(edges_list1, edges_list2, edges_list3) )
 write_graph(g,
-            paste0("networks/Building_net.graphml"),"graphml" )
-
+            paste0(output_path, "Building_net.graphml"),"graphml" )
