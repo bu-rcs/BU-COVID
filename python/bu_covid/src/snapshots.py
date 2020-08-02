@@ -1,5 +1,18 @@
-# Snapshot analyzers for BU specific info
+## ---------------------------
+##
+## Snapshot analyzers for BU specific info
+##
+## Authors: Brian Gregor, Wenrui Li 
+##          Boston University
+##
+## Date Created: 2020-07-31
+##
+## Email: bgregor@bu.edu
+##
+## ---------------------------
 
+
+# 
 __all__=['snapshots_to_df','get_BU_snapshots','infection_count_to_df','diag2iso_count_to_df','severe_count_to_df','critical_count_to_df','dead_count_to_df']
 
 import covasim as cv
@@ -184,6 +197,7 @@ class BU_diag2iso_count(BU_res_quarantine_count):
         # Store today's quarantine numbers for next time
         self.yesterday_quarantine = sim.people.quarantined.copy()
             
+            
 class BU_severe_count(BU_res_quarantine_count):
     ''' Snapshot the demographics of anyone who is 
         infected on any given day '''
@@ -206,6 +220,7 @@ class BU_severe_count(BU_res_quarantine_count):
                 self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
                 self.snapshots[date]['category'] = ppl.category[today_diag]
 
+
 class BU_critical_count(BU_res_quarantine_count):
     ''' Snapshot the demographics of anyone who is 
         infected on any given day '''
@@ -227,6 +242,7 @@ class BU_critical_count(BU_res_quarantine_count):
                 self.snapshots[date]['campResident'] = ppl.campResident[today_diag]
                 self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
                 self.snapshots[date]['category'] = ppl.category[today_diag]
+
 
 class BU_dead_count(BU_res_quarantine_count):
     ''' Snapshot the demographics of anyone who is 
@@ -339,7 +355,7 @@ def diag2iso_count_to_df(sims_complete):
     return pd.DataFrame(data=data)
 
 def severe_count_to_df(sims_complete):
-    ''' The infection count is the index 4 analyzer.  Convert it to 
+    ''' The infection count is the index 6 analyzer.  Convert it to 
         a pandas dataframe '''
     data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'group':[],
           'campResident':[], 'full_info_id':[], 'category':[]}
@@ -366,7 +382,7 @@ def severe_count_to_df(sims_complete):
     return pd.DataFrame(data=data)
 
 def critical_count_to_df(sims_complete):
-    ''' The infection count is the index 4 analyzer.  Convert it to 
+    ''' The infection count is the index 7 analyzer.  Convert it to 
         a pandas dataframe '''
     data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'group':[],
           'campResident':[], 'full_info_id':[], 'category':[]}
@@ -393,7 +409,7 @@ def critical_count_to_df(sims_complete):
     return pd.DataFrame(data=data)
 
 def dead_count_to_df(sims_complete):
-    ''' The infection count is the index 4 analyzer.  Convert it to 
+    ''' The infection count is the index 8 analyzer.  Convert it to 
         a pandas dataframe '''
     data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'group':[],
           'campResident':[], 'full_info_id':[], 'category':[]}
@@ -424,7 +440,8 @@ def dead_count_to_df(sims_complete):
          
 def get_BU_snapshots(num_days):
     ''' Return a list of snapshots to be used with the simulations.  The order here
-        is specific and must match that in snapshots_to_df '''
+        is specific and must match that in snapshots_to_df. This could be handled
+        more elegantly but this works. '''
     return [BU_res_quarantine_count(list(range(num_days))),
             BU_res_iso_count(list(range(num_days))),
             BU_nonres_quarantine_count(list(range(num_days))),

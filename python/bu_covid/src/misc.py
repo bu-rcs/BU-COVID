@@ -1,14 +1,16 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Jun  7 17:46:15 2020
-
-Functions used for the BU Covasim modeling.
-
-
-
-@author: bgregor
-"""
+## ---------------------------
+##
+## Miscellaneous functions used for file i/o, creating
+## the pop_info data structure for covasim, etc.
+##
+## Authors: Brian Gregor, Wenrui Li 
+##          Boston University
+##
+## Date Created: 2020-07-31
+##
+## Email: bgregor@bu.edu
+##
+## ---------------------------
 
 import numpy as np
 import datetime

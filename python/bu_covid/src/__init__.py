@@ -1,6 +1,17 @@
-# Load the custom BU code for covasim
-
+## ---------------------------
+##
+##  Load the custom BU code for covasim
+##
+## Authors: Brian Gregor, Wenrui Li 
+##          Boston University
+##
+## Date Created: 2020-07-31
+##
+## Email: bgregor@bu.edu
+##
+## ---------------------------
 # This MUST COME FIRST in order to monkeypatch the covasim People class.
+
 import covasim as cv
 
 # =============================================================================

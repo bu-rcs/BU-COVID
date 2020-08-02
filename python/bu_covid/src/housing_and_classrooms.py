@@ -1,4 +1,16 @@
-# Functions related to processing classroom and housing contact lists
+## ---------------------------
+##
+## Functions related to processing classroom and housing contact lists
+##
+## Authors: Brian Gregor, Wenrui Li 
+##          Boston University
+##
+## Date Created: 2020-07-31
+##
+## Email: bgregor@bu.edu
+##
+## ---------------------------
+
 
 import itertools as it
 import datetime

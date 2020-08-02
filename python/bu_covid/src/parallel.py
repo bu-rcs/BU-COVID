@@ -1,4 +1,27 @@
-# Functions related to parallel processing
+## ---------------------------
+##
+## Functions related to parallel processing
+##
+## Authors: Brian Gregor, Wenrui Li 
+##          Boston University
+##
+## Date Created: 2020-07-31
+##
+## Email: bgregor@bu.edu
+##
+## ---------------------------
+##
+#  The sciris-based parallelizatio in covasim ran into memory errors
+#  when run on 28-core machines so we wrote our own. This works without 
+#  errors on 64-core machines.  Each Python process in the multiprocessing
+#  pool handles 1 simulation and is then replaced with a fresh process.
+#
+#  By default this calls the simulation shrink() method which strips out the
+#  People object to save RAM.  Reading in 1000 simulations with 30,000 people
+#  for 109 days requires ~200 GB of RAM.
+#
+#  Read the docstring for the get_n_cores() function on using multiple cores.
+
 
 import os
 import multiprocessing as mp
@@ -14,6 +37,7 @@ import psutil
 
 # =============================================================================
 #   Implement parallel simulation processing for covasim
+#
 #   Change 7/22/2020 - write out simulation results as pickled files
 #    during paralllel processing.  Then read the results into the master
 #    process.  This saves gobs of RAM.  There's a moderate time penalty
@@ -24,7 +48,7 @@ import psutil
 __all__ = ['get_n_cores','parallel_run_sims']
 
 #%%
-def get_n_cores(use_physical_cores=False):
+def get_n_cores(use_physical_cores=False, cores_var='NSLOTS'):
     ''' Get the number of Cores that should be used.  This
     checks for an environment variable, NSLOTS, that is set
     using the SGE cluster queue software as used at BU's
@@ -35,8 +59,8 @@ def get_n_cores(use_physical_cores=False):
     Optionally, set the use_physical_cores flag and this 
     will just use all available physical cores.
     '''
-    # Note that this won't pick up the cores on a 2nd socket.  If you know 
-    # how many sockets/cores you have...just set the NSLOTS
+    # Note that cpu_count won't pick up the cores on a 2nd socket.  
+    # If you know how many sockets/cores you have...just set the NSLOTS
     # variable.
     phys_cores = psutil.cpu_count(logical = False)
     if use_physical_cores:
@@ -46,11 +70,11 @@ def get_n_cores(use_physical_cores=False):
     # but just to make sure this default isn't too many...
     if ncores > phys_cores:
         ncores = phys_cores
-    # Environment checking for BU's SCC
-    if 'NSLOTS' in os.environ:
-        ncores = int(os.environ['NSLOTS'])
+    # Environment checking for BU's SCC if this ran in the 
+    # job queue.  
+    if cores_var in os.environ:
+        ncores = int(os.environ[cores_var])
     return ncores 
-
 
 
 def get_random_string(length):
