@@ -36,7 +36,7 @@ sim_daily <- read_csv(dir_csv) %>%
   rename(Infections="new_infections", Recoveries="new_recoveries", Deaths="new_deaths") %>%
   gather(Type, counts, Infections:Deaths, factor_key = TRUE ) 
 
-##### All the various things that can be plotted: 
+##### Other various things that can be plotted: 
 #'cum_infections', 'cum_infectious', 'cum_tests', 'cum_diagnoses', 'cum_recoveries', 'cum_symptomatic', 
 # 'cum_severe', 'cum_critical', 'cum_deaths', 'cum_quarantined', 'new_infections', 'new_infectious', 
 # 'new_tests', 'new_diagnoses', 'new_recoveries', 'new_symptomatic', 'new_severe', 'new_critical', 
