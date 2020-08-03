@@ -32,5 +32,5 @@ export PLOT_DIR=~/covid_sims
 export N_SIM_RUNS=100
 export NSLOTS=8
 export N_IMPORTS=3
-python test_tracing.pyt
+python test_tracing.py
 ```
