@@ -30,7 +30,7 @@ sim_cum <- read_csv(dir_csv) %>%
   gather(Type, counts, Infections:Deaths, factor_key = TRUE ) 
 
 
-# get daily infections, cumulative recoveries, cumulative deaths
+# get daily infections, daily recoveries, daily deaths
 sim_daily <- read_csv(dir_csv) %>%  
   select(dates, new_infections, new_recoveries, new_deaths) %>%
   rename(Infections="new_infections", Recoveries="new_recoveries", Deaths="new_deaths") %>%
