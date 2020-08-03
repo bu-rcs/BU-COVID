@@ -44,7 +44,7 @@ hnet_dir = '../../Data/networks'
 pop_info_path = '../../Data/input/pop_info.csv'
 
 # Name of this simulation for output files:
-sim_name = 'baseline'
+sim_name = 'no_interventions'
 
 # =============================================================================
 #   baseline
@@ -58,7 +58,7 @@ sim_name = 'baseline'
 # ============================================================================= 
 
 # Set a destination for plots and graphml files
-plot_dir = '../../Data/networks/results/baseline'
+plot_dir = '../../Data/results/no_interventions'
 if 'PLOT_DIR' in os.environ:  
     plot_dir = os.environ['PLOT_DIR']
 
