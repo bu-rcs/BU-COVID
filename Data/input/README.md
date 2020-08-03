@@ -27,7 +27,7 @@ floor (numeric) - floor number<br>
 room (numeric) - room number
 
 ### pop_info.csv
-This file describes the university population. In this example only students and faculty are present. 
+This file describes the university population. In this example only students and faculty are present. <br>
 7 columns:<br>
 id (numeric) - student or faculty ID;<br>
 age (numeric) - age; for faculty age "brackets" are used - 35 for [30-39], 45 for [40-49], etc.;<br>
@@ -37,7 +37,7 @@ campResident (numeric) - 0 - does not live on campu, 1 - lives in a small dorm, 
 category (numeric) - risk group ( 1 - highest risk, 4 - lowest risk);<br>
 undergrad (binary) - 1 - undergraduate student, 0 - otherwise
 
-Variables group, campResident, category and undergrad are used to run specific interventions.
+Variables *group*, *campResident*, *category* and *undergrad* are used to run specific interventions.
 
 
 
