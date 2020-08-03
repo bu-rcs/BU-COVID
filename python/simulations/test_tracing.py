@@ -57,16 +57,19 @@ hnet_dir = '../../Data/networks'
 pop_info_path = '../../Data/input/pop_info.csv'
 
 # Name of this simulation for output files:
-sim_name = 'testing'
+sim_name = 'test_tracing'
 
 # =============================================================================
+#  test_tracing
 #
 #        Per-layer beta multiplicative factors
 #        Classroom and housing networks in place.
 #        classroom networks 'on' only on class days
-#        Platooning turned off
-#        Testing turned off
-#        Tracing off
+#        Platooning turned on
+#        Housing density reduced
+#        self-attestation for testing is on
+#        Testing is on
+#        Tracing is on
 # ============================================================================= 
 
 # Set a destination for plots and graphml files
@@ -94,12 +97,22 @@ if 'BETA_household' in os.environ:
 beta_floor=0.03
 if 'BETA_floor' in os.environ:
     beta_floor = os.environ['BETA_floor']
-# Make sure the plot directory exists
 
 test_sensitivity = 0.9
 if 'TEST_sensitivity' in os.environ:
     test_sensitivity = os.environ['TEST_sensitivity']
 
+n_event_infect=10
+if 'N_EVENT_INFECT' in os.environ:
+    n_event_infect=int(os.environ['N_EVENT_INFECT'])
+    
+trace_sensitivity = 0.3
+if 'TRACE_sensitivity' in os.environ:
+    trace_sensitivity = os.environ['TRACE_sensitivity']
+    
+trace_specificity = 0.9
+if 'TRACE_specificity' in os.environ:
+    trace_specificity = os.environ['TRACE_specificity']
 
 os.makedirs(plot_dir, exist_ok = True) 
 
@@ -246,6 +259,37 @@ interventions.append(cv.test_prob(start_day = 0, test_delay = 1, symp_prob = 0.7
 interventions += bu.gen_periodic_testing_interventions(BU_pop, num_days, test_period=7, quar_test=1, start_day = 0, test_delay = 1, symp_test = 1, sensitivity=0.997)
 
 
+
+# =============================================================================
+#   contact tracing (roommate, household + floors and classrooms at 30/90 sen/spec rates)
+# =============================================================================
+
+trace_probs={}
+trace_time={}
+trace_sens={}
+trace_spec={}
+for layer in {**class_contacts, **household_contacts}:
+    trace_probs[layer]= 0
+    trace_time[layer] = 1
+    trace_sens[layer]=trace_sensitivity
+    trace_spec[layer]=trace_specificity
+ 
+# Override some of the values that were set.
+# These are contacts we definitely know!
+trace_probs['roommate'] = 1.0
+trace_probs['household'] = 1.0
+
+trace_sens['roommate'] = 0
+trace_sens['household'] = 0
+
+trace_spec['roommate'] = 1.0
+trace_spec['household'] = 1.0
+
+# Create the tracing interventions
+interventions.append(cv.contact_tracing(start_day=start_day,trace_probs=trace_probs, trace_time=trace_time,presumptive=True))
+interventions.append(bu.contact_tracing_sens_spec(start_day=start_day,trace_sensitivity=trace_sens,trace_specificity=trace_spec, trace_time=trace_time,presumptive=True))
+
+
 #%%
 # =============================================================================
 #  Run the simulations
@@ -331,9 +375,6 @@ plots1 = sc.odict({
                     'new_diagnoses',
                     'new_recoveries',
                     'new_deaths',
-                   # 'n_quarantined',
-                #    'n_diagnosed',
-                   # 'new_diagnoses'
                 ],
                 'Health outcomes': [
                     'cum_severe',

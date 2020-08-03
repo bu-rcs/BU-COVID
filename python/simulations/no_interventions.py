@@ -47,14 +47,16 @@ pop_info_path = '../../Data/input/pop_info.csv'
 sim_name = 'no_interventions'
 
 # =============================================================================
-#   baseline
+#   no_interventions
 #
 #        Per-layer beta multiplicative factors
 #        Classroom and housing networks in place.
 #        classroom networks 'on' only on class days
 #        Platooning turned off
-#        Testing turned off
-#        Tracing off
+#        Housing density unchanged
+#        self-attestation for testing is off
+#        Testing is off
+#        Tracing is off
 # ============================================================================= 
 
 # Set a destination for plots and graphml files
