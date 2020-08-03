@@ -71,7 +71,7 @@ sim_name = 'self_attestation'
 # ============================================================================= 
 
 # Set a destination for plots and graphml files
-plot_dir = '/rprojectnb/bucovid/wenrui/Covasim/result'
+plot_dir = '../../Data/results/self_attestation/'
 if 'PLOT_DIR' in os.environ:  
     plot_dir = os.environ['PLOT_DIR']  
 
