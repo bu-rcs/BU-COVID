@@ -57,10 +57,9 @@ hnet_dir = '../../Data/networks'
 pop_info_path = '../../Data/input/pop_info.csv'
 
 # Name of this simulation for output files:
-sim_name = 'self_attestation'
+sim_name = 'testing'
 
 # =============================================================================
-#   baseline
 #
 #        Per-layer beta multiplicative factors
 #        Classroom and housing networks in place.
@@ -71,7 +70,7 @@ sim_name = 'self_attestation'
 # ============================================================================= 
 
 # Set a destination for plots and graphml files
-plot_dir = '/rprojectnb/bucovid/wenrui/Covasim/result'
+plot_dir = '../../Data/results/testing'
 if 'PLOT_DIR' in os.environ:  
     plot_dir = os.environ['PLOT_DIR']  
 
