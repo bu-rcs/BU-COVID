@@ -32,7 +32,7 @@ import matplotlib
 # With this line the plots will not show up on the screen
 # but they will be saved. Comment it out if you want to see plots
 # on the screen.  This MUST be called before the "import sciris" line.
-#matplotlib.use('Agg')
+matplotlib.use('Agg')
 
 
 
@@ -73,7 +73,7 @@ sim_name = 'self_attestation'
 # ============================================================================= 
 
 # Set a destination for plots and graphml files
-plot_dir = '../../Data/results/self_attestation/'
+plot_dir = '../../Data/results'
 if 'PLOT_DIR' in os.environ:  
     plot_dir = os.environ['PLOT_DIR']  
 
@@ -103,7 +103,7 @@ test_sensitivity = 0.9
 if 'TEST_sensitivity' in os.environ:
     test_sensitivity = os.environ['TEST_sensitivity']
 
-
+plot_dir = os.path.join(plot_dir,sim_name)
 os.makedirs(plot_dir, exist_ok = True) 
 
 #%%

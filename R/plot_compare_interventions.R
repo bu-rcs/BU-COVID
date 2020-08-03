@@ -25,13 +25,13 @@ n_pop <- 3750
 hdir <- "../Data/results/"
 name_csv <- c("no_interventions/sim_results_no_interventions.csv",
               "social_distancing/sim_results_social_distancing.csv",
-              "testing/sim_results_testing.csv")
+              "test_tracing/sim_results_test_tracing.csv")
 
 n_int <- length(name_csv) -1
 sim_results <- vector("list",n_int + 2)
 int_seq <- c(" No intervention",
              "+ Classroom masks/distancing",
-             "+ Testing",
+             "+ testing/tracing",
              "Purely exogenous (~1 per day) ")
 int_seq <- factor(int_seq, levels = int_seq)
 
