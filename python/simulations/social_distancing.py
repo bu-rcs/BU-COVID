@@ -52,10 +52,9 @@ hnet_dir = '../../Data/networks'
 pop_info_path = '../../Data/input/pop_info.csv'
 
 # Name of this simulation for output files:
-sim_name = 'social_dist'
+sim_name = 'social_distancing'
 
 # =============================================================================
-#   baseline
 #
 #        Per-layer beta multiplicative factors
 #        Classroom and housing networks in place.
@@ -66,7 +65,7 @@ sim_name = 'social_dist'
 # ============================================================================= 
 
 # Set a destination for plots and graphml files
-plot_dir = '/rprojectnb/bucovid/wenrui/Covasim/result'
+plot_dir = '../../Data/results/social_distancing/'
 if 'PLOT_DIR' in os.environ:  
     plot_dir = os.environ['PLOT_DIR']  
 
