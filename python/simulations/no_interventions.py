@@ -128,10 +128,6 @@ h_files = ['RoomNet.graphml',
            'Building_net.graphml']
 hgraphs=[Graph.Read_GraphML(os.path.join(hnet_dir, hf)) for hf in h_files]
  
-
-#if not bu.validate_graphs(hgraphs):
-#    raise Exception('Graph vertices do not match!  Exiting.')
-    
 hlayer_names = ['roommate','household','floor','building']
 household_contacts = bu.get_all_housing_contacts_dict(hgraphs, hlayer_names)
 
