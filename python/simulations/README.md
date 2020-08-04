@@ -3,12 +3,13 @@
 These are examples of setting up simulations in Python.  
 
 * *no_interventions.py* - Run the simulations without testing, tracing, or social distancing.
-* *social_distancing.py* - Housing density is reduced, classrooms are split into "platoons" that meet physically in one class per week, and classrooms are less dense.
-* *self_attestation.py* - Add an intervention where people get themselves tested if they are symptomatic.
-* *test_tracing.py* - Add weekly testing interventions for everyone on the simulation.  Contact tracing interventions are added for roommates, housemates, floormates, and classmates.
+* *classrooms.py* - Classrooms are split into "platoons" that meet physically in one class per week, masks are worn, and classrooms are less dense.
+* *households.py* - Housing density is reduced in addition to the interventions in classrooms.py. 
+* *testing.py* - Add weekly testing to the population in addition to symptomatic people reporting themselves to get tested.  
+* *tracing.py* - Add contact tracing interventions are added for roommates, housemates, floormates, and classmates.
 
-The simulations read the following environment variables.  The TEST and TRACE variables are only
-read by the test_tracing.py simulation for its testing and tracing interventions:
+The simulations read the following environment variables.  The TEST variable is used in testing.py and tracing.py.  The TRACE variables are only
+read by the tracing.py simulation:
 
 * PLOT_DIR - The output directory for simulation files. The simulation's name (stored as the variable "sim_name") is appended to this path. The default is "../../Data/results".
 * N_SIM_RUNS - The number of copies of the simulation to run. The default is 1.
@@ -32,5 +33,6 @@ export PLOT_DIR=~/covid_sims
 export N_SIM_RUNS=100
 export NSLOTS=8
 export N_IMPORTS=3
-python test_tracing.py
+python tracing.py
+# output will be written to:  ~/covid_sims/tracing
 ```
