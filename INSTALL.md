@@ -3,8 +3,8 @@
 
 ## R Requirements
 
-List of required R packages and minimum versions here.
-
+The code has been tested with R 3.6 and 4.0 versions.
+The following packages are used in R scripts: igraph, readr, dplyr, ggplot2, tidyr, scales, Matrix
 
 ## Install bu_covid Python code
 
