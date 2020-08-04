@@ -1,6 +1,6 @@
 # Dataset example
 
-This directory contains 5 comma-separated files that describe the demographics of the population, course registrations and schedules, and information on student resident housing of an artificail university. The population of this university consists of 2000 undergraduate, 1000 masters and 500 PhD students as well as 250 faculty members.
+This directory contains 5 comma-separated files that describe the demographics of the population, course registrations and schedules, and information on student resident housing of an artificial university. The population of this university consists of 2000 undergraduate, 1000 masters and 500 PhD students as well as 250 faculty members.
 
 These files are then converted into networks and saved as GraphML formatted files using *pre-process_classroom_data.R* and *pre-process_house_data.R* scripts located in R directory.
 
