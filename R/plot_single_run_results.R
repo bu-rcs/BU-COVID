@@ -1,6 +1,6 @@
 ## ---------------------------
 ##
-## Plot results for single run
+## Plot results for single run (N_SIM_RUNS=1)
 ##
 ## Authors: Wenrui Li, Katia Bulekova 
 ##          Boston University
@@ -18,20 +18,20 @@ library(tidyr)
 library(scales)
 
 # covasim output csv 
-dir_csv <- "../Data/results/no_interventions/sim_results_single_run.csv"
+dir_csv <- "../Data/results/testing/sim_results_testing_N_SIM_RUNS_1.csv"
 
 # population size
 n_pop <- 3750
 
 # get cumulative infections, cumulative recoveries, cumulative deaths
-sim_cum <- read_csv(dir_csv) %>% 
+sim_cum <- read_csv(dir_csv, col_types = cols()) %>% 
   select(dates, cum_infections, cum_recoveries, cum_deaths) %>%
   rename(Infections="cum_infections", Recoveries="cum_recoveries", Deaths="cum_deaths") %>%
   gather(Type, counts, Infections:Deaths, factor_key = TRUE ) 
 
 
 # get daily infections, daily recoveries, daily deaths
-sim_daily <- read_csv(dir_csv) %>%  
+sim_daily <- read_csv(dir_csv, col_types = cols()) %>%  
   select(dates, new_infections, new_recoveries, new_deaths) %>%
   rename(Infections="new_infections", Recoveries="new_recoveries", Deaths="new_deaths") %>%
   gather(Type, counts, Infections:Deaths, factor_key = TRUE ) 
@@ -49,7 +49,23 @@ sim_daily <- read_csv(dir_csv) %>%
 # The prefix "n" is used for stock variables, i.e. counting the total number in any given state (sus/inf/rec/etc) on any particular timestep
 # The prefix "cum" is used for cumulative variables, i.e. counting the total number that have ever been in a given state at some point in the sim
 
-# make plot
+# make plot (absolute values)
+ggplot(sim_cum, aes(as.Date(dates), y = counts,color=Type) ) +
+  geom_line( aes(y = counts ), size = 1) + 
+  xlab("") +
+  ylab("Total") +
+  ggtitle("Cumulative values of model population") +
+  scale_x_date(date_breaks = "15 day", date_labels =  "%b-%d") +
+  #scale_y_continuous(labels=scales::percent,limits=c(0,1)) +
+  theme_minimal(base_size = 12) +
+  theme(legend.title = element_blank(),legend.position = c(0.1, 0.85),
+        plot.title = element_text(hjust = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill=NA,color="black", size=0.5),
+        panel.background = element_blank())
+
+
+# make plot (percentage)
 ggplot(sim_cum, aes(as.Date(dates), y = counts/n_pop,color=Type) ) +
   geom_line( aes(y = counts/n_pop), size = 1) + 
   xlab("") +
@@ -64,6 +80,24 @@ ggplot(sim_cum, aes(as.Date(dates), y = counts/n_pop,color=Type) ) +
         panel.border = element_rect(fill=NA,color="black", size=0.5),
         panel.background = element_blank())
 
+
+# make plot of daily values
+ggplot(sim_daily, aes(as.Date(dates), y = counts, color=Type) ) +
+  geom_line( aes(y = counts), size = 1) + 
+  xlab("") +
+  ylab("Total") +
+  ggtitle("Daily values of model population") +
+  scale_x_date(date_breaks = "15 day", date_labels =  "%b-%d") +
+  #scale_y_continuous(labels=scales::percent) +
+  theme_minimal(base_size = 12) +
+  theme(legend.title = element_blank(),legend.position = c(0.1, 0.85),
+        plot.title = element_text(hjust = 0.5),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill=NA,color="black", size=0.5),
+        panel.background = element_blank())
+
+
+# make plot (percentage) of daily values
 ggplot(sim_daily, aes(as.Date(dates), y = counts/n_pop,color=Type) ) +
   geom_line( aes(y = counts/n_pop), size = 1) + 
   xlab("") +
