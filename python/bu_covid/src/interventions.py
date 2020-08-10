@@ -417,7 +417,7 @@ class pulsed_infections_network(cv.Intervention):
         if len(targets) > pulse_count:
             del targets[pulse_count:]
         # Now infect those targets
-        sim.people.infect(inds=np.array(targets, dtype = np.int32))
+        sim.people.infect(inds=np.array(targets, dtype = np.int32),layer='importation')
         return
     
     @staticmethod
@@ -595,7 +595,7 @@ class contact_tracing_sens_spec(cv.Intervention):
                 # Find all infected contacts
                    edge_inds_infected = np.array([],dtype=np.int32)
                    for x,y in enumerate(edge_inds):
-                       if not sim.people.susceptible[x]:
+                       if not sim.people.susceptible[y]:
                            edge_inds_infected = np.append(edge_inds_infected,y)
                 
 
@@ -621,7 +621,7 @@ class contact_tracing_sens_spec(cv.Intervention):
                 # Find all not infected contacts
                    edge_inds_noninfected = np.array([],dtype=np.int32)
                    for x,y in enumerate(edge_inds):
-                       if sim.people.susceptible[x]:
+                       if sim.people.susceptible[y]:
                            edge_inds_noninfected = np.append(edge_inds_noninfected,y)
 
                 # Check contacts
