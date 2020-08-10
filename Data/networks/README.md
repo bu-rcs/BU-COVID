@@ -1,6 +1,6 @@
 # Networks GraphML files
 
-This directory contains University Networks saved as GraphML files. These networks are used to run python simulations.
+This directory contains University Networks saved as GraphML files. These networks are used as input files to run python simulations.
 
 Classroom networks are stored separately for each day of the week:<br>
 M - Monday<br>
