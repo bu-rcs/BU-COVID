@@ -12,8 +12,7 @@
 ## ---------------------------
 
 
-# 
-__all__=['snapshots_to_df','get_BU_snapshots','infection_count_to_df','diag2iso_count_to_df','severe_count_to_df','critical_count_to_df','dead_count_to_df']
+__all__=['snapshots_to_df','get_BU_snapshots','infection_count_to_df','diag2iso_count_to_df','severe_count_to_df','critical_count_to_df','dead_count_to_df','diagnosed_count_to_df','recovered_count_to_df','quarantined_count_to_df']
 
 import covasim as cv
 import sciris as sc
@@ -165,9 +164,16 @@ class BU_infection_count(BU_res_quarantine_count):
                 self.snapshots[date]['campResident'] = ppl.campResident[today_diag]
                 self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
                 self.snapshots[date]['category'] = ppl.category[today_diag]
-
-
-
+                self.snapshots[date]['exogenous'] = np.ones(len(today_diag[0]),dtype=np.uint8)
+                self.snapshots[date]['GI'] = np.zeros(len(today_diag[0]),dtype=np.uint8)
+                self.snapshots[date]['source'] = np.zeros(len(today_diag[0]),dtype=np.uint8)
+                source = [item['source'] for item in ppl.infection_log if item['target'] in today_diag[0]]
+                for ind, val in enumerate(source):
+                    if val is not None:
+                        self.snapshots[date]['GI'][ind] = sim.t - [item['date'] for item in ppl.infection_log if item['target'] == val][0]
+                        self.snapshots[date]['exogenous'][ind] = 0 
+                        self.snapshots[date]['source'][ind] = val
+                        
 class BU_diag2iso_count(BU_res_quarantine_count):
     ''' Count every time someone in quarantine is diagnosed '''
     def apply(self,sim):
@@ -197,7 +203,6 @@ class BU_diag2iso_count(BU_res_quarantine_count):
         # Store today's quarantine numbers for next time
         self.yesterday_quarantine = sim.people.quarantined.copy()
             
-            
 class BU_severe_count(BU_res_quarantine_count):
     ''' Snapshot the demographics of anyone who is 
         infected on any given day '''
@@ -219,7 +224,6 @@ class BU_severe_count(BU_res_quarantine_count):
                 self.snapshots[date]['campResident'] = ppl.campResident[today_diag]
                 self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
                 self.snapshots[date]['category'] = ppl.category[today_diag]
-
 
 class BU_critical_count(BU_res_quarantine_count):
     ''' Snapshot the demographics of anyone who is 
@@ -243,7 +247,6 @@ class BU_critical_count(BU_res_quarantine_count):
                 self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
                 self.snapshots[date]['category'] = ppl.category[today_diag]
 
-
 class BU_dead_count(BU_res_quarantine_count):
     ''' Snapshot the demographics of anyone who is 
         infected on any given day '''
@@ -266,7 +269,85 @@ class BU_dead_count(BU_res_quarantine_count):
                 self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
                 self.snapshots[date]['category'] = ppl.category[today_diag]
 
-            
+class BU_diagnosed_count(BU_res_quarantine_count):
+    ''' Snapshot the demographics of anyone who is 
+        infected on any given day '''
+    def apply(self,sim):
+        ppl = sim.people
+        for ind in cv.interventions.find_day(self.days, sim.t):
+            date = self.dates[ind]
+            # They're diagnosed today if their diagnosis date equals today's date.
+            #today_diag = np.where(ppl.date_diagnosed.astype(np.int32) == sim.t)
+            today_diag = np.where(ppl.date_diagnosed.astype(np.int32) == sim.t)
+            # This stores several quantities on each date:
+            # list of ages of infected
+            # list of group (student/faculty/etc)
+            # etc. Only store them if there is something found.
+            if len(today_diag[0]) > 0:
+                self.snapshots[date] = {}
+                self.snapshots[date]['age'] = ppl.age[today_diag]
+                self.snapshots[date]['group'] = ppl.group[today_diag]
+                self.snapshots[date]['campResident'] = ppl.campResident[today_diag]
+                self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
+                self.snapshots[date]['category'] = ppl.category[today_diag]
+                self.snapshots[date]['exogenous'] = np.ones(len(today_diag[0]),dtype=np.uint8)
+                source = [item['source'] for item in ppl.infection_log if item['target'] in today_diag[0]]
+                for ind, val in enumerate(source):
+                    if val is not None:
+                        self.snapshots[date]['exogenous'][ind] = 0 
+
+class BU_recovered_count(BU_res_quarantine_count):
+    ''' Snapshot the demographics of anyone who is 
+        infected on any given day '''
+    def apply(self,sim):
+        ppl = sim.people
+        for ind in cv.interventions.find_day(self.days, sim.t):
+            date = self.dates[ind]
+            # They're diagnosed today if their diagnosis date equals today's date.
+            #today_diag = np.where(ppl.date_diagnosed.astype(np.int32) == sim.t)
+            today_diag = np.where(ppl.date_recovered.astype(np.int32) == sim.t)
+            # This stores several quantities on each date:
+            # list of ages of infected
+            # list of group (student/faculty/etc)
+            # etc. Only store them if there is something found.
+            if len(today_diag[0]) > 0:
+                self.snapshots[date] = {}
+                self.snapshots[date]['age'] = ppl.age[today_diag]
+                self.snapshots[date]['group'] = ppl.group[today_diag]
+                self.snapshots[date]['campResident'] = ppl.campResident[today_diag]
+                self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
+                self.snapshots[date]['category'] = ppl.category[today_diag]
+                self.snapshots[date]['asymptomatic'] = np.zeros(len(today_diag[0]),dtype=np.uint8)
+                date_symptomatic = ppl.date_symptomatic[today_diag]
+                for ind, val in enumerate(date_symptomatic):
+                    if np.isnan(val):
+                        self.snapshots[date]['asymptomatic'][ind] = 1
+                        
+class BU_quarantined_count(BU_res_quarantine_count):
+    ''' Snapshot the demographics of anyone who is 
+        infected on any given day '''
+    def apply(self,sim):
+        ppl = sim.people
+        for ind in cv.interventions.find_day(self.days, sim.t):
+            date = self.dates[ind]
+            # They're diagnosed today if their diagnosis date equals today's date.
+            #today_diag = np.where(ppl.date_diagnosed.astype(np.int32) == sim.t)
+            today_diag = np.where(ppl.date_quarantined.astype(np.int32) == sim.t)
+            # This stores several quantities on each date:
+            # list of ages of infected
+            # list of group (student/faculty/etc)
+            # etc. Only store them if there is something found.
+            if len(today_diag[0]) > 0:
+                self.snapshots[date] = {}
+                self.snapshots[date]['age'] = ppl.age[today_diag]
+                self.snapshots[date]['group'] = ppl.group[today_diag]
+                self.snapshots[date]['campResident'] = ppl.campResident[today_diag]
+                self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
+                self.snapshots[date]['category'] = ppl.category[today_diag]
+
+
+
+                        
 def snapshots_to_df(sims_complete):
     ''' Take a list of completed simulations with analyzers in the 
         order:  BU_res_quarantine_count, BU_res_diag_count, BU_nonres_quarantine_count, BU_nonres_diag_count.
@@ -302,7 +383,7 @@ def infection_count_to_df(sims_complete):
     ''' The infection count is the index 4 analyzer.  Convert it to 
         a pandas dataframe '''
     data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'group':[],
-          'campResident':[], 'full_info_id':[], 'category':[]}
+          'campResident':[], 'full_info_id':[], 'category':[],'exogenous':[],'GI':[],'source':[]}
     for i, sim in enumerate(sims_complete):    
         # Get the snapshot
         BU_infect = sim['analyzers'][4]
@@ -321,6 +402,9 @@ def infection_count_to_df(sims_complete):
                     data['campResident'].append(BU_infect.snapshots[date]['campResident'][k])
                     data['full_info_id'].append(BU_infect.snapshots[date]['full_info_id'][k])
                     data['category'].append(BU_infect.snapshots[date]['category'][k])
+                    data['exogenous'].append(BU_infect.snapshots[date]['exogenous'][k])
+                    data['GI'].append(BU_infect.snapshots[date]['GI'][k])
+                    data['source'].append(BU_infect.snapshots[date]['source'][k])
                     count += 1
         data['sim_num'] += count * [i]
     return pd.DataFrame(data=data)
@@ -355,7 +439,7 @@ def diag2iso_count_to_df(sims_complete):
     return pd.DataFrame(data=data)
 
 def severe_count_to_df(sims_complete):
-    ''' The infection count is the index 6 analyzer.  Convert it to 
+    ''' The infection count is the index 4 analyzer.  Convert it to 
         a pandas dataframe '''
     data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'group':[],
           'campResident':[], 'full_info_id':[], 'category':[]}
@@ -382,7 +466,7 @@ def severe_count_to_df(sims_complete):
     return pd.DataFrame(data=data)
 
 def critical_count_to_df(sims_complete):
-    ''' The infection count is the index 7 analyzer.  Convert it to 
+    ''' The infection count is the index 4 analyzer.  Convert it to 
         a pandas dataframe '''
     data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'group':[],
           'campResident':[], 'full_info_id':[], 'category':[]}
@@ -409,7 +493,7 @@ def critical_count_to_df(sims_complete):
     return pd.DataFrame(data=data)
 
 def dead_count_to_df(sims_complete):
-    ''' The infection count is the index 8 analyzer.  Convert it to 
+    ''' The infection count is the index 4 analyzer.  Convert it to 
         a pandas dataframe '''
     data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'group':[],
           'campResident':[], 'full_info_id':[], 'category':[]}
@@ -435,13 +519,92 @@ def dead_count_to_df(sims_complete):
         data['sim_num'] += count * [i]
     return pd.DataFrame(data=data)
 
-
+def diagnosed_count_to_df(sims_complete):
+    ''' The infection count is the index 4 analyzer.  Convert it to 
+        a pandas dataframe '''
+    data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'group':[],
+          'campResident':[], 'full_info_id':[], 'category':[],'exogenous':[]}
+    for i, sim in enumerate(sims_complete):    
+        # Get the snapshot
+        BU_infect = sim['analyzers'][9]
+        # Loop through the dates and add everything found to data.
+        # Not the most elegant code, but it gets the job done.
+        count = 0 
+        for j,date in enumerate(BU_infect.dates):
+            days = BU_infect.days[j]
+            # Everything that happened on this day gets saved.
+            if date in BU_infect.snapshots:
+                for k in range(BU_infect.snapshots[date]['age'].shape[0]):
+                    data['dates'].append(date)
+                    data['days'].append(days)
+                    data['age'].append(BU_infect.snapshots[date]['age'][k])
+                    data['group'].append(BU_infect.snapshots[date]['group'][k])
+                    data['campResident'].append(BU_infect.snapshots[date]['campResident'][k])
+                    data['full_info_id'].append(BU_infect.snapshots[date]['full_info_id'][k])
+                    data['category'].append(BU_infect.snapshots[date]['category'][k])
+                    data['exogenous'].append(BU_infect.snapshots[date]['exogenous'][k])
+                    count += 1
+        data['sim_num'] += count * [i]
+    return pd.DataFrame(data=data)
 #%%             
-         
+def recovered_count_to_df(sims_complete):
+    ''' The infection count is the index 4 analyzer.  Convert it to 
+        a pandas dataframe '''
+    data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'group':[],
+          'campResident':[], 'full_info_id':[], 'category':[],'asymptomatic':[]}
+    for i, sim in enumerate(sims_complete):    
+        # Get the snapshot
+        BU_infect = sim['analyzers'][10]
+        # Loop through the dates and add everything found to data.
+        # Not the most elegant code, but it gets the job done.
+        count = 0 
+        for j,date in enumerate(BU_infect.dates):
+            days = BU_infect.days[j]
+            # Everything that happened on this day gets saved.
+            if date in BU_infect.snapshots:
+                for k in range(BU_infect.snapshots[date]['age'].shape[0]):
+                    data['dates'].append(date)
+                    data['days'].append(days)
+                    data['age'].append(BU_infect.snapshots[date]['age'][k])
+                    data['group'].append(BU_infect.snapshots[date]['group'][k])
+                    data['campResident'].append(BU_infect.snapshots[date]['campResident'][k])
+                    data['full_info_id'].append(BU_infect.snapshots[date]['full_info_id'][k])
+                    data['category'].append(BU_infect.snapshots[date]['category'][k])
+                    data['asymptomatic'].append(BU_infect.snapshots[date]['asymptomatic'][k])
+                    count += 1
+        data['sim_num'] += count * [i]
+    return pd.DataFrame(data=data)
+    
+def quarantined_count_to_df(sims_complete):
+    ''' The infection count is the index 4 analyzer.  Convert it to 
+        a pandas dataframe '''
+    data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'group':[],
+          'campResident':[], 'full_info_id':[], 'category':[]}
+    for i, sim in enumerate(sims_complete):    
+        # Get the snapshot
+        BU_infect = sim['analyzers'][11]
+        # Loop through the dates and add everything found to data.
+        # Not the most elegant code, but it gets the job done.
+        count = 0 
+        for j,date in enumerate(BU_infect.dates):
+            days = BU_infect.days[j]
+            # Everything that happened on this day gets saved.
+            if date in BU_infect.snapshots:
+                for k in range(BU_infect.snapshots[date]['age'].shape[0]):
+                    data['dates'].append(date)
+                    data['days'].append(days)
+                    data['age'].append(BU_infect.snapshots[date]['age'][k])
+                    data['group'].append(BU_infect.snapshots[date]['group'][k])
+                    data['campResident'].append(BU_infect.snapshots[date]['campResident'][k])
+                    data['full_info_id'].append(BU_infect.snapshots[date]['full_info_id'][k])
+                    data['category'].append(BU_infect.snapshots[date]['category'][k])
+                    count += 1
+        data['sim_num'] += count * [i]
+    return pd.DataFrame(data=data)
+    
 def get_BU_snapshots(num_days):
     ''' Return a list of snapshots to be used with the simulations.  The order here
-        is specific and must match that in snapshots_to_df. This could be handled
-        more elegantly but this works. '''
+        is specific and must match that in snapshots_to_df '''
     return [BU_res_quarantine_count(list(range(num_days))),
             BU_res_iso_count(list(range(num_days))),
             BU_nonres_quarantine_count(list(range(num_days))),
@@ -450,5 +613,8 @@ def get_BU_snapshots(num_days):
             BU_diag2iso_count(list(range(num_days))),
             BU_severe_count(list(range(num_days))),
             BU_critical_count(list(range(num_days))),
-            BU_dead_count(list(range(num_days))),]
+            BU_dead_count(list(range(num_days))),
+            BU_diagnosed_count(list(range(num_days))),
+            BU_recovered_count(list(range(num_days))),
+            BU_quarantined_count(list(range(num_days))),]
     

@@ -14,7 +14,8 @@ import datetime
 from .misc import make_dt, get_daynum
 
 __all__=['test_post_quar', 'gen_periodic_testing_interventions','gen_large_dorm_testing_interventions',
-         'test_household_when_pos','pulsed_infections_network','gen_undergrad_testing_interventions','contact_tracing_sens_spec']
+         'test_household_when_pos','pulsed_infections_network','gen_undegrad_testing_interventions','contact_tracing_sens_spec',
+         'import_infections_network','import_infections_percent_network','pulsed_infections_diffuse']
 
 class test_post_quar(cv.Intervention):
     '''
@@ -417,7 +418,10 @@ class pulsed_infections_network(cv.Intervention):
         if len(targets) > pulse_count:
             del targets[pulse_count:]
         # Now infect those targets
-        sim.people.infect(inds=np.array(targets, dtype = np.int32),layer='importation')
+        hosp_max = sim.people.count('severe')   > sim['n_beds_hosp'] if sim['n_beds_hosp'] else False # Check for acute bed constraint
+        icu_max  = sim.people.count('critical') > sim['n_beds_icu']  if sim['n_beds_icu']  else False # Check for ICU bed constraint
+        sim.people.infect(inds=np.array(targets, dtype = np.int32),hosp_max = hosp_max,icu_max  = icu_max,layer='importation')
+        #sim.people.exogenous[np.array(targets, dtype = np.int32)] = np.full(len(targets),1,np.int32)
         return
     
     @staticmethod
@@ -443,7 +447,7 @@ class pulsed_infections_network(cv.Intervention):
         
 
 # Test undergrad every test_period_large days. Everyone else is tested every test_period days.     
-def gen_undergrad_testing_interventions(BU_pop, num_days, test_period_large = 3,  test_period=7, **kwargs):
+def gen_undegrad_testing_interventions(BU_pop, num_days, test_period_large = 3,  test_period=7, **kwargs):
     ''' Test undergrad every test_period_large days.
         Everyone else is tested every test_period days.
         
@@ -456,8 +460,8 @@ def gen_undergrad_testing_interventions(BU_pop, num_days, test_period_large = 3,
         Returns: A list of cv.test_num interventions
     '''
     # Split the uids into 2 populations - in larger dorms and out of them
-    uids_large = BU_pop['uid'][np.where(BU_pop['undergrad'] > 0)].copy()
-    uids_other = BU_pop['uid'][np.where(BU_pop['undergrad'] < 1)].copy()
+    uids_large = BU_pop['uid'][np.where(BU_pop['undegrad'] > 0)].copy()
+    uids_other = BU_pop['uid'][np.where(BU_pop['undegrad'] < 1)].copy()
     # shuffle 'em up
     np.random.shuffle(uids_large)
     np.random.shuffle(uids_other)
@@ -633,3 +637,192 @@ class contact_tracing_sens_spec(cv.Intervention):
 
         return
     
+
+
+class import_infections_network(cv.Intervention):
+    '''
+    Infects a set of people across networks.  
+    '''
+    
+    def __init__(self, days, import_count = 1, import_sampling = 'poisson', **kwargs):
+        super().__init__(**kwargs) # Initialize the Intervention object
+        self._store_args() # Store the input arguments so the intervention can be recreated
+        if import_count >= 1:
+            self.import_count = import_count
+        else:
+            raise Exception('import_count must be >= 1')
+        self.days = np.array(days, dtype = np.bool)
+        self.import_sampling = import_sampling.strip().lower()
+        self.start_day = None
+        self.end_day = None
+        return
+
+
+    def initialize(self, sim):
+        ''' Fix the dates and number of tests '''
+        # Handle days
+        self.start_day   = sim.day(self.start_day)
+        self.end_day     = sim.day(self.end_day)
+        self.initialized = True
+        return
+
+    def apply(self, sim):
+        # If today is not a pulse day then return.
+        if not self.days[sim.t]:
+            return
+        
+        # Use either constant infection count or a Poisson average
+        import_count = self.import_count
+        if self.import_sampling == 'poisson':
+            import_count = cvu.poisson(self.import_count)  
+        hosp_max = sim.people.count('severe')   > sim['n_beds_hosp'] if sim['n_beds_hosp'] else False # Check for acute bed constraint
+        icu_max  = sim.people.count('critical') > sim['n_beds_icu']  if sim['n_beds_icu']  else False # Check for ICU bed constraint
+        #susceptible_inds = cvu.true(sim.people.susceptible)   
+        #susceptible_importation_inds = cvu.choose(max_n=len(susceptible_inds), n=import_count)
+        #importation_inds = susceptible_inds[susceptible_importation_inds]
+        importation_inds = cvu.choose(max_n=len(sim.people), n=import_count)
+        sim.people.infect(inds=importation_inds,hosp_max=hosp_max, icu_max=icu_max, layer='importation')
+        return
+    
+    @staticmethod
+    def get_days_arr(start_day, end_day, import_day):
+        ''' Returns a numpy array for the days to apply a pulse.
+        start_day, end_day are date strings.
+        import_day is th enumber of the day of the week to apply
+        the import.  Sunday=0.'''
+        num_days = (make_dt(end_day) - make_dt(start_day)).days + 1
+
+        days_arr = np.zeros(num_days, dtype=np.int32)
+        # datetime for the start of the sim
+        sdt = make_dt(start_day)
+        # And a 1 day time delta
+        td = datetime.timedelta(days=1)
+        # What day of the week (number) do you want pulses on?
+        # Friday = 5 (sunday is 0)
+        for i in range(num_days):
+            today = sdt + i * td
+            if get_daynum(today) == import_day:
+                days_arr[i] = 1
+        return days_arr
+
+
+
+
+class import_infections_percent_network(cv.Intervention):
+    '''
+    Infects a set of people across networks.  
+    '''
+    
+    def __init__(self, days, import_count = 20, import_percent = .5,import_sampling = 'poisson', **kwargs):
+        super().__init__(**kwargs) # Initialize the Intervention object
+        self._store_args() # Store the input arguments so the intervention can be recreated
+        if import_count >= 1:
+            self.import_count = import_count
+        else:
+            raise Exception('import_count must be >= 1')
+        self.import_percent = import_percent
+        self.days = np.array(days, dtype = np.bool)
+        self.import_sampling = import_sampling.strip().lower()
+        self.start_day = None
+        self.end_day = None
+        return
+
+
+    def initialize(self, sim):
+        ''' Fix the dates and number of tests '''
+        # Handle days
+        self.start_day   = sim.day(self.start_day)
+        self.end_day     = sim.day(self.end_day)
+        self.initialized = True
+        return
+
+    def apply(self, sim):
+        # If today is not a pulse day then return.
+        if not self.days[sim.t]:
+            return
+        
+        # Use either constant infection count or a Poisson average
+        import_count_oncampus = self.import_count*self.import_percent
+        import_count_offcampus = self.import_count-import_count_oncampus
+        if self.import_sampling == 'poisson':
+            import_count_oncampus = cvu.poisson(import_count_oncampus)  
+            import_count_offcampus = cvu.poisson(import_count_offcampus)
+        hosp_max = sim.people.count('severe')   > sim['n_beds_hosp'] if sim['n_beds_hosp'] else False # Check for acute bed constraint
+        icu_max  = sim.people.count('critical') > sim['n_beds_icu']  if sim['n_beds_icu']  else False # Check for ICU bed constraint
+
+        susceptible_check = sim.people.susceptible
+        # for on-campus
+        at_bu = sim.people.campResident > 0
+        at_bu_inds = cvu.true(at_bu & susceptible_check)   
+        importation_inds = cvu.choose(max_n=len(at_bu_inds), n=import_count_oncampus )
+        sim.people.infect(inds=at_bu_inds[importation_inds],hosp_max=hosp_max, icu_max=icu_max, layer='importation')
+        # for off-campus student
+        not_at_bu = sim.people.campResident < 1
+        student = sim.people.category < 2
+        not_at_bu_student = not_at_bu & student
+        not_at_bu_inds = cvu.true(not_at_bu_student & susceptible_check)
+        importation_inds = cvu.choose(max_n=len(not_at_bu_inds), n=import_count_offcampus )
+        sim.people.infect(inds=not_at_bu_inds[importation_inds],hosp_max=hosp_max, icu_max=icu_max, layer='importation')
+        
+        return
+    
+    @staticmethod
+    def get_days_arr(start_day, end_day, import_day):
+        ''' Returns a numpy array for the days to apply a pulse.
+        start_day, end_day are date strings.
+        import_day is th enumber of the day of the week to apply
+        the import.  Sunday=0.'''
+        num_days = (make_dt(end_day) - make_dt(start_day)).days + 1
+
+        days_arr = np.zeros(num_days, dtype=np.int32)
+        # datetime for the start of the sim
+        sdt = make_dt(start_day)
+        # And a 1 day time delta
+        td = datetime.timedelta(days=1)
+        # What day of the week (number) do you want pulses on?
+        # Friday = 5 (sunday is 0)
+        for i in range(num_days):
+            today = sdt + i * td
+            if get_daynum(today) == import_day:
+                days_arr[i] = 1
+        return days_arr
+        
+        
+class pulsed_infections_diffuse(pulsed_infections_network):
+    ''' A modification to pulsed_infections_network.  Instead of trying to infect whole 
+        households or roommates together, infect the layer in a diffuse manner. '''
+    
+    def apply(self, sim):
+        # If today is not a pulse day then return.
+        if not self.days[sim.t]:
+            return
+        # set of those who will be infected
+        targets = set()
+
+        iters = 0
+        # Index list for the networks
+        net_inds = list(range(len(self.networks)))
+        
+        # Use either constant infection count or a Poisson average
+        pulse_count = self.pulse_count
+        if self.pulse_sampling == 'poisson':
+            pulse_count = np.random.poisson(self.pulse_count)  
+
+        # limit the number of loop iterations for safety
+        max_loops = 500 * pulse_count
+        
+        while len(targets) < pulse_count and iters < max_loops:
+            # Pick a household/roommates/etc.
+            net = np.random.choice(net_inds)
+            # Now pick a random person from that network.
+            person = np.random.choice(self.networks[net])
+            # If they're not in the set and susceptible add them
+            # to the target infection list.
+            if person not in targets and sim.people.susceptible[person]:
+                targets.add(person)
+
+            iters += 1
+        targets = list(targets)
+        # Now infect those targets
+        sim.people.infect(inds=np.array(targets, dtype = np.int32))
+        return    
