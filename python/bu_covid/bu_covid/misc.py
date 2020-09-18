@@ -290,8 +290,5 @@ def sim_results_to_df(sims_complete):
         data['sim_num'] += len(sim.results['date']) * [i]
         
     return pd.DataFrame(data=data)
-
-
-
-
+ 
 

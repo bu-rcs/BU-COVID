@@ -18,8 +18,11 @@ import covasim as cv
 import sciris as sc
 import numpy as np
 import pandas as pd
+from collections import deque
 import copy
 import covasim.utils as cvu
+ 
+ 
 
 class BU_res_quarantine_count(cv.Analyzer):
     '''
@@ -38,7 +41,7 @@ class BU_res_quarantine_count(cv.Analyzer):
     '''
 
     def __init__(self, days, *args, **kwargs):
-        super().__init__(**kwargs) # Initialize the Intervention object
+        super().__init__(**kwargs) # Initialize the Analyzer object
         days = sc.promotetolist(days) # Combine multiple days
         days.extend(args) # Include additional arguments, if present
         self.days      = days # Converted to integer representations
@@ -394,7 +397,33 @@ class BU_quarantined_end_count(BU_res_quarantine_count):
                     self.snapshots[date]['category'] = ppl.category[res_diag_inds]
     # Store today's quarantine numbers for next time
         self.yesterday_quarantine = sim.people.quarantined.copy()
-                        
+  
+class BU_quarantined_rooms_count(BU_res_quarantine_count):
+    ''' Count the number of quarantine rooms in use, including ones
+    undergoing cleaning for a specified number of days '''
+    def __init__(self, days, clean_days, *args, **kwargs):
+        super().__init__(days,**kwargs) # Initialize the BU_res_quarantine_count object
+        self.clean_days = clean_days # Number of days it takes to clean a room.
+        # Number of rooms in the cleaning state plus those leaving today.
+        self.cleaning = deque(maxlen=clean_days) 
+        return
+
+    def apply(self,sim):
+        ppl = sim.people
+        # Just doing some sort of sum.  Not quite right.  
+        for ind in cv.interventions.find_day(self.days, sim.t):
+            date = self.dates[ind]
+            # Find all people who are leaving quarantine today and count them.
+            n_leaving = cv.true(ppl.date_end_quarantine == ind).size           
+            # Count of people quarantined today
+            quar_today = np.sum(np.logical_and(sim.people.quarantined,sim.people.campResident > 0))
+            # Sum up the the rooms in the cleaning state and add to quar_today to
+            # get the total number of rooms being used. 
+            self.snapshots[date] = sum(self.cleaning) + quar_today
+            # And now add the number leaving today to the cleaning list to be 
+            # counted tomorrow.
+            self.cleaning.append(n_leaving)
+        
 def snapshots_to_df(sims_complete):
     ''' Take a list of completed simulations with analyzers in the 
         order:  BU_res_quarantine_count, BU_res_diag_count, BU_nonres_quarantine_count, BU_nonres_diag_count.
@@ -404,22 +433,25 @@ def snapshots_to_df(sims_complete):
            
         The sim_num column is the index of the simulations.'''
     data={'sim_num':[], 'dates':[], 'days':[], 'n_res_quar':[], 'n_res_iso':[],
-          'n_nonres_quar':[], 'n_nonres_iso':[]}
+          'n_nonres_quar':[], 'n_nonres_iso':[], 'n_res_quar_with_cleaning':[]}
     for i, sim in enumerate(sims_complete):    
         # Get the snapshots
         BU_quar = sim['analyzers'][0]
         BU_iso = sim['analyzers'][1]
         non_BU_quar = sim['analyzers'][2]
         non_BU_iso = sim['analyzers'][3]
+        BU_quar_rooms_count = sim['analyzers'][13]
         # Get the dates from bu_quar
         data['dates'] += BU_quar.dates
         sim_days = list( BU_quar.days )
         data['days'] += sim_days
-        # Extract the data from both snapshots
+        # Extract the data from all snapshots
         data['n_res_quar'] += [BU_quar.snapshots[x] for x in BU_quar.dates]
         data['n_res_iso'] += [BU_iso.snapshots[x] for x in BU_quar.dates]
         data['n_nonres_quar'] += [non_BU_quar.snapshots[x] for x in BU_quar.dates]
         data['n_nonres_iso'] += [non_BU_iso.snapshots[x] for x in BU_quar.dates]        
+        # And the count of quarantine rooms with cleaning
+        data['n_res_quar_with_cleaning'] += [BU_quar_rooms_count.snapshots[x] for x in BU_quar.dates]        
         # Now fill in the sim_num
         data['sim_num'] += len(sim_days) * [i]
 
@@ -593,6 +625,7 @@ def diagnosed_count_to_df(sims_complete):
                     count += 1
         data['sim_num'] += count * [i]
     return pd.DataFrame(data=data)
+    
 #%%             
 def recovered_count_to_df(sims_complete):
     ''' The infection count is the index 4 analyzer.  Convert it to 
@@ -676,21 +709,25 @@ def quarantined_end_count_to_df(sims_complete):
                     count += 1
         data['sim_num'] += count * [i]
     return pd.DataFrame(data=data)    
+
+ 
     
-def get_BU_snapshots(num_days):
+def get_BU_snapshots(num_days, cleaning_days):
     ''' Return a list of snapshots to be used with the simulations.  The order here
         is specific and must match that in snapshots_to_df '''
-    return [BU_res_quarantine_count(list(range(num_days))),
-            BU_res_iso_count(list(range(num_days))),
-            BU_nonres_quarantine_count(list(range(num_days))),
-            BU_nonres_iso_count(list(range(num_days))),
-            BU_infection_count(list(range(num_days))),
-            BU_diag2iso_count(list(range(num_days))),
-            BU_severe_count(list(range(num_days))),
-            BU_critical_count(list(range(num_days))),
-            BU_dead_count(list(range(num_days))),
-            BU_diagnosed_count(list(range(num_days))),
-            BU_recovered_count(list(range(num_days))),
-            BU_quarantined_count(list(range(num_days))),
-            BU_quarantined_end_count(list(range(num_days))),]
+    day_lst = list(range(num_days))
+    return [BU_res_quarantine_count(day_lst),
+            BU_res_iso_count(day_lst),
+            BU_nonres_quarantine_count(day_lst),
+            BU_nonres_iso_count(day_lst),
+            BU_infection_count(day_lst),
+            BU_diag2iso_count(day_lst),
+            BU_severe_count(day_lst),
+            BU_critical_count(day_lst),
+            BU_dead_count(day_lst),
+            BU_diagnosed_count(day_lst),
+            BU_recovered_count(day_lst),
+            BU_quarantined_count(day_lst),
+            BU_quarantined_end_count(day_lst),
+            BU_quarantined_rooms_count(day_lst, cleaning_days)]
     
