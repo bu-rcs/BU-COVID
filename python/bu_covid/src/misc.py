@@ -113,7 +113,7 @@ def gen_BU_pop2(people_lut,class_contacts={}, household_contacts={}):
               'layer_keys':list(contact_dicts.keys()),
               'sex':np.full(pop_size,0,def_flt), 
               'uid':np.zeros(pop_size,dtype=def_int),
-              'group':np.zeros(pop_size,dtype=np.uint8),
+              'test_cat':np.zeros(pop_size,dtype=np.uint8),
               'category':np.zeros(pop_size,dtype=np.uint8),
               'campResident':np.zeros(pop_size,dtype=np.uint8),
               'undergrad':np.zeros(pop_size,dtype=np.uint8),
@@ -129,7 +129,7 @@ def gen_BU_pop2(people_lut,class_contacts={}, household_contacts={}):
             idx = lut[person]
             BU_pop['age'][idx] = people_lut[person]['age']  
             BU_pop['sex'][idx] = people_lut[person]['sex']  
-            BU_pop['group'][idx] = people_lut[person]['group']  
+            BU_pop['test_cat'][idx] = people_lut[person]['test_cat']
             BU_pop['category'][idx] = people_lut[person]['category']
             BU_pop['undergrad'][idx] = people_lut[person]['undergrad']
            # BU_pop['position'][idx] = people_lut[person]['position']  
@@ -257,7 +257,7 @@ def update_sim_people(sim,BU_pop):
     sim.initialize()
     # Add our parameters
     sim.people['undergrad'] = BU_pop['undergrad']
-    sim.people['group'] = BU_pop['group']
+    sim.people['test_cat'] = BU_pop['test_cat']
     sim.people['category'] = BU_pop['category']
     sim.people['campResident'] = BU_pop['campResident']
     sim.people['full_info_id'] = BU_pop['full_info_id']
