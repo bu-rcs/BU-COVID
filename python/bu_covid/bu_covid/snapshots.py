@@ -11,8 +11,12 @@
 ##
 ## ---------------------------
 
+ 
+# Default number of days that quarantine rooms are cleaned for after
+# someone leaves quarantine:
+CLEANING_DAYS=2 
 
-__all__=['snapshots_to_df','get_BU_snapshots','infection_count_to_df','diag2iso_count_to_df','severe_count_to_df','critical_count_to_df','dead_count_to_df','diagnosed_count_to_df','recovered_count_to_df','quarantined_count_to_df','quarantined_end_count_to_df']
+__all__=['snapshots_to_df','get_BU_snapshots','infection_count_to_df','diag2iso_count_to_df','severe_count_to_df','critical_count_to_df','dead_count_to_df','diagnosed_count_to_df','recovered_count_to_df','quarantined_count_to_df','quarantined_end_count_to_df','CLEANING_DAYS']
 
 import covasim as cv
 import sciris as sc
@@ -22,6 +26,7 @@ from collections import deque
 import copy
 import covasim.utils as cvu
  
+
  
 
 class BU_res_quarantine_count(cv.Analyzer):
@@ -401,11 +406,11 @@ class BU_quarantined_end_count(BU_res_quarantine_count):
 class BU_quarantined_rooms_count(BU_res_quarantine_count):
     ''' Count the number of quarantine rooms in use, including ones
     undergoing cleaning for a specified number of days '''
-    def __init__(self, days, clean_days, *args, **kwargs):
+    def __init__(self, days, *args, cleaning_days=CLEANING_DAYS, **kwargs):
         super().__init__(days,**kwargs) # Initialize the BU_res_quarantine_count object
-        self.clean_days = clean_days # Number of days it takes to clean a room.
+        self.cleaning_days = cleaning_days # Number of days it takes to clean a room.
         # Number of rooms in the cleaning state plus those leaving today.
-        self.cleaning = deque(maxlen=clean_days) 
+        self.cleaning = deque(maxlen=cleaning_days) 
         return
 
     def apply(self,sim):
@@ -712,7 +717,7 @@ def quarantined_end_count_to_df(sims_complete):
 
  
     
-def get_BU_snapshots(num_days, cleaning_days):
+def get_BU_snapshots(num_days, cleaning_days=CLEANING_DAYS):
     ''' Return a list of snapshots to be used with the simulations.  The order here
         is specific and must match that in snapshots_to_df '''
     day_lst = list(range(num_days))
