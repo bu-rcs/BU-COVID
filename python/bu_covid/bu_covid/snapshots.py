@@ -96,7 +96,35 @@ class BU_res_quarantine_count(cv.Analyzer):
         return snapshot
 
 
-class BU_res_iso_count(BU_res_quarantine_count):
+class BU_iso_count(BU_res_quarantine_count):
+    def __init__(self, days, *args, iso_days=ISO_DAYS, **kwargs):
+        super().__init__(days, **kwargs) # Initialize the Analyzer object
+        self.iso_days = iso_days
+    
+    
+    ''' Add a method to calculate the number of people
+        in isolation.'''
+    def iso_count(self, ppl, sim_t):
+        ''' ppl: sim.people
+            sim_t: simulation day'''
+        diagnosed = ppl.date_diagnosed <= sim_t
+        # not diagnosed 
+        not_diagnosed = ~diagnosed
+        
+        recov = ppl.recovered
+        not_recov = ~recov
+        alive = ~ppl.dead
+        not_at_bu = ppl.campResident < 1
+        at_bu = ppl.campResident > 0
+        not_severe = ~ppl.severe
+        not_critical = ~ppl.critical
+        # In isolation today based on health
+        iso_today_health = not_recov & alive & not_severe & not_critical & diagnosed 
+        # In isolation due to iso_days waiting period
+        iso_today_waiting = diagnosed & recov & (ppl.date_diagnosed > (sim_t - self.iso_days))
+        return iso_today_health + iso_today_waiting
+ 
+class BU_res_iso_count(BU_iso_count):
     ''' Snapshot the number of people isolated (diagnosed and not recovered),
         who are resident at BU.  Just override the apply() function '''
     def apply(self, sim):
@@ -106,20 +134,8 @@ class BU_res_iso_count(BU_res_quarantine_count):
                 self.snapshots[date] = 0
                 return  # 1st day no one can be isolated.
             # campResident is: 0 off campus, 1 on campus, 2 large dorm on campus
-            #sim.people.quarantined is a Boolean array of everyone who is quarantined
-            # Some shorthand to make the numpy statements easier to read
-            not_recov = ~sim.people.recovered
-            alive = ~sim.people.dead
             at_bu = sim.people.campResident > 0
-            #sick =  sim.people.diagnosed
-            # Is anyone diagnosed with returned test results?
-            diagnosed_inds = cv.true(np.isfinite(sim.people.date_diagnosed))
-            diag_today = np.full(sim.people.diagnosed.shape, np.iinfo(np.int32).max)
-            diag_today[diagnosed_inds] = sim.people.date_diagnosed[diagnosed_inds] 
-            diag_today = diag_today <= sim.t
-            not_severe = ~sim.people.severe
-            not_critical = ~sim.people.critical
-            self.snapshots[date] = np.sum(not_recov & alive & at_bu  & not_severe & not_critical & diag_today)
+            self.snapshots[date] = np.sum(self.iso_count(sim.people, sim.t) & at_bu)
         return    
  
 
@@ -135,7 +151,7 @@ class BU_nonres_quarantine_count(BU_res_quarantine_count):
             self.snapshots[date] = np.sum(np.logical_and(sim.people.quarantined,sim.people.campResident < 1)) 
         return    
     
-class BU_nonres_iso_count(BU_res_quarantine_count):
+class BU_nonres_iso_count(BU_iso_count):
     ''' Snapshot the number of people isolated (diagnosed and not recovered),
         who are not resident at BU.  '''
     def apply(self, sim):
@@ -143,19 +159,11 @@ class BU_nonres_iso_count(BU_res_quarantine_count):
             date = self.dates[ind]
             if sim.t == 0:
                 self.snapshots[date] = 0
-                return  # 1st day no one can be isolated.            # campResident is: 0 off campus, 1 on campus, 2 large dorm on campus
-            #sim.people.quarantined is a Boolean array of everyone who is quarantined
-            not_recov = ~sim.people.recovered
-            alive = ~sim.people.dead
+                return  # 1st day no one can be isolated.            
+                
+            # campResident is: 0 off campus, 1 on campus, 2 large dorm on campus
             not_at_bu = sim.people.campResident < 1
-            # Is anyone diagnosed with returned test results?
-            diagnosed_inds = cv.true(np.isfinite(sim.people.date_diagnosed))
-            diag_today = np.full(sim.people.diagnosed.shape, np.iinfo(np.int32).max)
-            diag_today[diagnosed_inds] = sim.people.date_diagnosed[diagnosed_inds] 
-            diag_today = diag_today <= sim.t
-            not_severe = ~sim.people.severe
-            not_critical = ~sim.people.critical
-            self.snapshots[date] = np.sum(not_recov & alive & not_at_bu & not_severe & not_critical & diag_today)
+            self.snapshots[date] = np.sum(self.iso_count(sim.people, sim.t) & not_at_bu)
         return    
 
 
@@ -416,7 +424,7 @@ class BU_quarantined_end_count(BU_res_quarantine_count):
 #     quarantine room unavailable due to cleaning (off-campus), number of isolation
 #     room unavailable due to cleaning (on-campus), number of isolation room 
 #     unavailable due to cleaning (off-campus).
-class BU_cleaning_rooms_count(BU_res_quarantine_count):
+class BU_cleaning_rooms_count(BU_iso_count):
     ''' Count the number of isolations rooms in use, including ones
     undergoing cleaning for a specified number of days. This one will record a 4-element
     dictionary for each day - watch for that in the dataframe conversion.
@@ -474,26 +482,18 @@ class BU_cleaning_rooms_count(BU_res_quarantine_count):
             return
         # Now the simulation is running...carry on.
         ppl = sim.people
-    
-        diagnosed_inds = cv.true(np.isfinite(sim.people.date_diagnosed))
-        diagnosed = np.full(sim.people.diagnosed.shape, np.iinfo(np.int32).max)
-        diagnosed[diagnosed_inds] = sim.people.date_diagnosed[diagnosed_inds] 
-        # diagnosed means that at some point before today they were diagnosed.
-        diagnosed = diagnosed <= sim.t
+        diagnosed = ppl.date_diagnosed <= sim.t
+        not_diagnosed = ~diagnosed
         # Is this the day they are released?
         quar_freedom = ppl.date_end_quarantine == sim.t
         # not diagnosed 
         not_diagnosed = ~diagnosed
         # Quarantined yesterday?
         was_quar = self.yesterday_quarantine
-        recov = sim.people.recovered
-        not_recov = ~recov
         alive = ~sim.people.dead
         not_at_bu = sim.people.campResident < 1
         at_bu = sim.people.campResident > 0
-        not_severe = ~sim.people.severe
-        not_critical = ~sim.people.critical
-
+         
         # Find all people who are leaving quarantine today who are not 
         # recovered (i.e. never got sick - quarantine only) and count them.
         # Do this twice for on and off campus residents.  Don't AND against
@@ -506,19 +506,18 @@ class BU_cleaning_rooms_count(BU_res_quarantine_count):
         # remember: critical --> ICU, severe --> hospital
         # So if they're leaving isolation use recovered==True as the date_end_quarantine gets incremented daily 
         # until they've recovered in which case it jumps forward by 14.
-
-        # In isolation today.  
-        on_iso_today = not_recov & alive & at_bu  & not_severe & not_critical & diagnosed
-        off_iso_today = not_recov & alive & not_at_bu  & not_severe & not_critical & diagnosed
         
         # Those leaving isolation are those who were in isolation yesterday but today have
         # finished 10 days post-diagnosis, gone to the hospital or have died. 
         # However if they have gone to severe or critical symptoms they go immediately to the hospital
-        # and leave isolation that day.  
-        iso_leaving = ((ppl.date_diagnosed + self.iso_days)==sim.t) | \
-                      (ppl.date_severe == sim.t) | \
-                      (ppl.date_critical == sim.t) |  \
-                      (ppl.date_dead == sim.t)   
+        # and leave isolation that day. 
+        # 3 cases. OR them all together
+        iso_leaving_1 = (ppl.date_diagnosed == (sim.t - self.iso_days)) & (ppl.date_recovered <= sim.t) 
+        iso_leaving_2 = (ppl.date_diagnosed < (sim.t - self.iso_days)) & (ppl.date_recovered == sim.t) 
+        iso_leaving_3 = (ppl.date_severe == sim.t) | \
+                        (ppl.date_critical == sim.t) |  \
+                        (ppl.date_dead == sim.t)   
+        iso_leaving = iso_leaving_1 | iso_leaving_2 | iso_leaving_3
         
         on_iso_leaving = np.sum(iso_leaving & at_bu)
         off_iso_leaving = np.sum(iso_leaving & not_at_bu)
@@ -534,14 +533,10 @@ class BU_cleaning_rooms_count(BU_res_quarantine_count):
         self.snapshots[date] = {**quar_sum, **iso_sum}
         # Also store the number of people leaving isolation today.
         self.snapshots[date]['n_leaving_on_iso_today'] = on_iso_leaving
-        # Copy the quarantine and isolation lists to use tomorrow.
+        # Copy the quarantine  list  to use tomorrow.
         self.yesterday_quarantine = sim.people.quarantined.copy()
-        self.yesterday_on_iso = on_iso_today.copy()
-        self.yesterday_off_iso = off_iso_today.copy()
 
-        
-        #self.yesterday_iso = 
-        
+
 def snapshots_to_df(sims_complete):
     ''' Take a list of completed simulations with analyzers in the 
         order:  BU_res_quarantine_count, BU_res_diag_count, BU_nonres_quarantine_count, BU_nonres_diag_count.
@@ -845,9 +840,9 @@ def get_BU_snapshots(num_days, quar_cleaning_days=QUAR_CLEANING_DAYS,
         is specific and must match that in snapshots_to_df '''
     day_lst = list(range(num_days))
     return [BU_res_quarantine_count(day_lst),
-            BU_res_iso_count(day_lst),
+            BU_res_iso_count(day_lst, iso_days),
             BU_nonres_quarantine_count(day_lst),
-            BU_nonres_iso_count(day_lst),
+            BU_nonres_iso_count(day_lst, iso_days),
             BU_infection_count(day_lst),
             BU_diag2iso_count(day_lst),
             BU_severe_count(day_lst),
