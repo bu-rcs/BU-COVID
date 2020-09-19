@@ -14,9 +14,15 @@
  
 # Default number of days that quarantine rooms are cleaned for after
 # someone leaves quarantine:
-CLEANING_DAYS=2 
+QUAR_CLEANING_DAYS = 2   
+ISO_CLEANING_DAYS = 2 
+ISO_DAYS = 10
 
-__all__=['snapshots_to_df','get_BU_snapshots','infection_count_to_df','diag2iso_count_to_df','severe_count_to_df','critical_count_to_df','dead_count_to_df','diagnosed_count_to_df','recovered_count_to_df','quarantined_count_to_df','quarantined_end_count_to_df','CLEANING_DAYS']
+__all__=['snapshots_to_df','get_BU_snapshots','infection_count_to_df',
+         'diag2iso_count_to_df','severe_count_to_df','critical_count_to_df',
+         'dead_count_to_df','diagnosed_count_to_df','recovered_count_to_df',
+         'quarantined_count_to_df','quarantined_end_count_to_df','QUAR_CLEANING_DAYS',   
+         'ISO_CLEANING_DAYS','ISO_DAYS']
 
 import covasim as cv
 import sciris as sc
@@ -25,7 +31,7 @@ import pandas as pd
 from collections import deque
 import copy
 import covasim.utils as cvu
- 
+import itertools as it 
 
  
 
@@ -62,6 +68,7 @@ class BU_res_quarantine_count(cv.Analyzer):
         self.dates = [sim.date(day) for day in self.days] # Store as date strings
         self.initialized = True
         self.snapshots = {} # Store the snapshots in a dictionary.
+        self.yesterday_quarantine = sim.people.quarantined.copy()
         return
 
 
@@ -106,7 +113,7 @@ class BU_res_iso_count(BU_res_quarantine_count):
             at_bu = sim.people.campResident > 0
             #sick =  sim.people.diagnosed
             # Is anyone diagnosed with returned test results?
-            diagnosed_inds = np.where(np.isfinite(sim.people.date_diagnosed))
+            diagnosed_inds = cv.true(np.isfinite(sim.people.date_diagnosed))
             diag_today = np.full(sim.people.diagnosed.shape, np.iinfo(np.int32).max)
             diag_today[diagnosed_inds] = sim.people.date_diagnosed[diagnosed_inds] 
             diag_today = diag_today <= sim.t
@@ -142,7 +149,7 @@ class BU_nonres_iso_count(BU_res_quarantine_count):
             alive = ~sim.people.dead
             not_at_bu = sim.people.campResident < 1
             # Is anyone diagnosed with returned test results?
-            diagnosed_inds = np.where(np.isfinite(sim.people.date_diagnosed))
+            diagnosed_inds = cv.true(np.isfinite(sim.people.date_diagnosed))
             diag_today = np.full(sim.people.diagnosed.shape, np.iinfo(np.int32).max)
             diag_today[diagnosed_inds] = sim.people.date_diagnosed[diagnosed_inds] 
             diag_today = diag_today <= sim.t
@@ -287,20 +294,20 @@ class BU_diagnosed_count(BU_res_quarantine_count):
             date = self.dates[ind]
             # They're diagnosed today if their diagnosis date equals today's date.
             #today_diag = np.where(ppl.date_diagnosed.astype(np.int32) == sim.t)
-            today_diag = np.where(ppl.date_diagnosed.astype(np.int32) == sim.t)
+            today_diag = cv.true(ppl.date_diagnosed.astype(np.int32) == sim.t)
             # This stores several quantities on each date:
             # list of ages of infected
             # list of group (student/faculty/etc)
             # etc. Only store them if there is something found.
-            if len(today_diag[0]) > 0:
+            if  today_diag.size > 0:
                 self.snapshots[date] = {}
                 self.snapshots[date]['age'] = ppl.age[today_diag]
                 self.snapshots[date]['test_cat'] = ppl.test_cat[today_diag]
                 self.snapshots[date]['campResident'] = ppl.campResident[today_diag]
                 self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
                 self.snapshots[date]['category'] = ppl.category[today_diag]
-                self.snapshots[date]['exogenous'] = np.ones(len(today_diag[0]),dtype=np.uint8)
-                source = [item['source'] for item in ppl.infection_log if item['target'] in today_diag[0]]
+                self.snapshots[date]['exogenous'] = np.ones(today_diag.size,dtype=np.uint8)
+                source = [item['source'] for item in ppl.infection_log if item['target'] in today_diag]
                 for ind, val in enumerate(source):
                     if val is not None:
                         self.snapshots[date]['exogenous'][ind] = 0 
@@ -402,32 +409,138 @@ class BU_quarantined_end_count(BU_res_quarantine_count):
                     self.snapshots[date]['category'] = ppl.category[res_diag_inds]
     # Store today's quarantine numbers for next time
         self.yesterday_quarantine = sim.people.quarantined.copy()
-  
-class BU_quarantined_rooms_count(BU_res_quarantine_count):
-    ''' Count the number of quarantine rooms in use, including ones
-    undergoing cleaning for a specified number of days '''
-    def __init__(self, days, *args, cleaning_days=CLEANING_DAYS, **kwargs):
+
+
+# For the output, I think we could add 4 extra columns in the snapshots_int*.csv: 
+#     number of quarantine room unavailable due to cleaning (on-campus), number of 
+#     quarantine room unavailable due to cleaning (off-campus), number of isolation
+#     room unavailable due to cleaning (on-campus), number of isolation room 
+#     unavailable due to cleaning (off-campus).
+class BU_cleaning_rooms_count(BU_res_quarantine_count):
+    ''' Count the number of isolations rooms in use, including ones
+    undergoing cleaning for a specified number of days. This one will record a 4-element
+    dictionary for each day - watch for that in the dataframe conversion.
+    
+    The daily snapshot dictionary keys are: 
+        n_oncampus_quarantine_cleaning, n_offcampus_quarantine_cleaning,
+        n_oncampus_isolation_cleaning, n_offcampus_isolation_cleaning
+    '''
+    def __init__(self, days, *args, quar_cleaning_days=QUAR_CLEANING_DAYS, 
+                 iso_cleaning_days=ISO_CLEANING_DAYS, iso_days=ISO_DAYS,**kwargs):
         super().__init__(days,**kwargs) # Initialize the BU_res_quarantine_count object
-        self.cleaning_days = cleaning_days # Number of days it takes to clean a room.
-        # Number of rooms in the cleaning state plus those leaving today.
-        self.cleaning = deque(maxlen=cleaning_days) 
+        # Number of days it takes to clean a quarantine room
+        self.quar_cleaning_days = quar_cleaning_days 
+        self.iso_cleaning_days = iso_cleaning_days
+        self.iso_days = ISO_DAYS # Req number of days in BU isolation rooms.
+        
+        # Number of quar rooms in the cleaning state plus those leaving today.
+        self.quar_cleaning = deque(maxlen=quar_cleaning_days) 
+        # Number of iso rooms in the cleaning state plus those leaving today
+        self.iso_cleaning = deque(maxlen=iso_cleaning_days) 
+
+        # Initialize the deque.
+        self.quar_cleaning_keys = ['n_oncampus_quarantine_cleaning',
+                                   'n_offcampus_quarantine_cleaning']
+        self.iso_cleaning_keys = ['n_oncampus_isolation_cleaning', 
+                                 'n_offcampus_isolation_cleaning']
+        self.all_keys =  self.quar_cleaning_keys + self.iso_cleaning_keys + ['n_leaving_on_iso_today']
+        
+        for i in range(len(self.quar_cleaning_keys)):
+            self.quar_cleaning.append(dict(zip(self.quar_cleaning_keys ,it.repeat(0))))
+        for i in range(len(self.iso_cleaning_keys)):
+            self.iso_cleaning.append(dict(zip(self.iso_cleaning_keys ,it.repeat(0))))
         return
 
+    def cleaning_sum(self, deque, keys):
+        ''' Sum up the  a deque by dictionary keys'''
+        count_sum = dict(zip(keys, it.repeat(0)))
+        for c in deque: # get each dict
+            for k in keys: # for each key add it
+                count_sum[k] += c[k]
+        return count_sum
+
     def apply(self,sim):
+        ind = cv.interventions.find_day(self.days, sim.t)
+        if len(ind) < 1:
+            return
+        ind = ind[0]
+        date = self.dates[ind]
+        # On day 1 do nothing.
+        if sim.t == 0:
+            quar_sum = self.cleaning_sum(self.quar_cleaning, self.quar_cleaning_keys)
+            iso_sum = self.cleaning_sum(self.iso_cleaning, self.iso_cleaning_keys)
+            self.snapshots[date] = {**quar_sum, **iso_sum}
+            self.snapshots[date]['n_leaving_on_iso_today'] = 0            
+            return
+        # Now the simulation is running...carry on.
         ppl = sim.people
-        # Just doing some sort of sum.  Not quite right.  
-        for ind in cv.interventions.find_day(self.days, sim.t):
-            date = self.dates[ind]
-            # Find all people who are leaving quarantine today and count them.
-            n_leaving = cv.true(ppl.date_end_quarantine == ind).size           
-            # Count of people quarantined today
-            quar_today = np.sum(np.logical_and(sim.people.quarantined,sim.people.campResident > 0))
-            # Sum up the the rooms in the cleaning state and add to quar_today to
-            # get the total number of rooms being used. 
-            self.snapshots[date] = sum(self.cleaning) + quar_today
-            # And now add the number leaving today to the cleaning list to be 
-            # counted tomorrow.
-            self.cleaning.append(n_leaving)
+    
+        diagnosed_inds = cv.true(np.isfinite(sim.people.date_diagnosed))
+        diagnosed = np.full(sim.people.diagnosed.shape, np.iinfo(np.int32).max)
+        diagnosed[diagnosed_inds] = sim.people.date_diagnosed[diagnosed_inds] 
+        # diagnosed means that at some point before today they were diagnosed.
+        diagnosed = diagnosed <= sim.t
+        # Is this the day they are released?
+        quar_freedom = ppl.date_end_quarantine == sim.t
+        # not diagnosed 
+        not_diagnosed = ~diagnosed
+        # Quarantined yesterday?
+        was_quar = self.yesterday_quarantine
+        recov = sim.people.recovered
+        not_recov = ~recov
+        alive = ~sim.people.dead
+        not_at_bu = sim.people.campResident < 1
+        at_bu = sim.people.campResident > 0
+        not_severe = ~sim.people.severe
+        not_critical = ~sim.people.critical
+
+        # Find all people who are leaving quarantine today who are not 
+        # recovered (i.e. never got sick - quarantine only) and count them.
+        # Do this twice for on and off campus residents.  Don't AND against
+        # ppl.quarantined because that will be false by the time this is called!
+        on_quar_leaving = np.sum(quar_freedom & was_quar & not_diagnosed & at_bu & alive)
+        off_quar_leaving = np.sum(quar_freedom & was_quar & not_diagnosed & not_at_bu & alive )
+
+        # Now for leaving isolation:  isolation means that they are diagnosed, NOT IN QUARANTINE, recovered, 
+        # were not critical, not severe
+        # remember: critical --> ICU, severe --> hospital
+        # So if they're leaving isolation use recovered==True as the date_end_quarantine gets incremented daily 
+        # until they've recovered in which case it jumps forward by 14.
+
+        # In isolation today.  
+        on_iso_today = not_recov & alive & at_bu  & not_severe & not_critical & diagnosed
+        off_iso_today = not_recov & alive & not_at_bu  & not_severe & not_critical & diagnosed
+        
+        # Those leaving isolation are those who were in isolation yesterday but today have
+        # finished 10 days post-diagnosis, gone to the hospital or have died. 
+        # However if they have gone to severe or critical symptoms they go immediately to the hospital
+        # and leave isolation that day.  
+        iso_leaving = ((ppl.date_diagnosed + self.iso_days)==sim.t) | \
+                      (ppl.date_severe == sim.t) | \
+                      (ppl.date_critical == sim.t) |  \
+                      (ppl.date_dead == sim.t)   
+        
+        on_iso_leaving = np.sum(iso_leaving & at_bu)
+        off_iso_leaving = np.sum(iso_leaving & not_at_bu)
+
+        # Finally store today's leaving count to use tomorrow.
+        self.quar_cleaning.append(dict(zip(self.quar_cleaning_keys,[on_quar_leaving,off_quar_leaving])))
+        self.iso_cleaning.append(dict(zip(self.iso_cleaning_keys,[on_iso_leaving,off_iso_leaving])))
+                                      
+        # Now from the deques get the sums
+        quar_sum = self.cleaning_sum(self.quar_cleaning, self.quar_cleaning_keys)
+        iso_sum = self.cleaning_sum(self.iso_cleaning, self.iso_cleaning_keys)
+
+        self.snapshots[date] = {**quar_sum, **iso_sum}
+        # Also store the number of people leaving isolation today.
+        self.snapshots[date]['n_leaving_on_iso_today'] = on_iso_leaving
+        # Copy the quarantine and isolation lists to use tomorrow.
+        self.yesterday_quarantine = sim.people.quarantined.copy()
+        self.yesterday_on_iso = on_iso_today.copy()
+        self.yesterday_off_iso = off_iso_today.copy()
+
+        
+        #self.yesterday_iso = 
         
 def snapshots_to_df(sims_complete):
     ''' Take a list of completed simulations with analyzers in the 
@@ -438,7 +551,12 @@ def snapshots_to_df(sims_complete):
            
         The sim_num column is the index of the simulations.'''
     data={'sim_num':[], 'dates':[], 'days':[], 'n_res_quar':[], 'n_res_iso':[],
-          'n_nonres_quar':[], 'n_nonres_iso':[], 'n_res_quar_with_cleaning':[]}
+          'n_nonres_quar':[], 'n_nonres_iso':[], 
+          'n_oncampus_quarantine_cleaning':[],
+          'n_offcampus_quarantine_cleaning':[],
+          'n_oncampus_isolation_cleaning':[], 
+          'n_offcampus_isolation_cleaning':[],
+          'n_leaving_on_iso_today':[]}
     for i, sim in enumerate(sims_complete):    
         # Get the snapshots
         BU_quar = sim['analyzers'][0]
@@ -455,8 +573,11 @@ def snapshots_to_df(sims_complete):
         data['n_res_iso'] += [BU_iso.snapshots[x] for x in BU_quar.dates]
         data['n_nonres_quar'] += [non_BU_quar.snapshots[x] for x in BU_quar.dates]
         data['n_nonres_iso'] += [non_BU_iso.snapshots[x] for x in BU_quar.dates]        
-        # And the count of quarantine rooms with cleaning
-        data['n_res_quar_with_cleaning'] += [BU_quar_rooms_count.snapshots[x] for x in BU_quar.dates]        
+        # Now..the count of rooms in cleaning is a little different because it snapshots a 4
+        # element dictionary.  Break out the dictionaries into columns here.
+        cleaning_keys = BU_quar_rooms_count.all_keys
+        for key in cleaning_keys:
+            data[key] += [BU_quar_rooms_count.snapshots[x][key] for x in BU_quar.dates]        
         # Now fill in the sim_num
         data['sim_num'] += len(sim_days) * [i]
 
@@ -717,7 +838,9 @@ def quarantined_end_count_to_df(sims_complete):
 
  
     
-def get_BU_snapshots(num_days, cleaning_days=CLEANING_DAYS):
+def get_BU_snapshots(num_days, quar_cleaning_days=QUAR_CLEANING_DAYS,
+                     iso_cleaning_days=ISO_CLEANING_DAYS,
+                     iso_days=ISO_DAYS):
     ''' Return a list of snapshots to be used with the simulations.  The order here
         is specific and must match that in snapshots_to_df '''
     day_lst = list(range(num_days))
@@ -734,5 +857,5 @@ def get_BU_snapshots(num_days, cleaning_days=CLEANING_DAYS):
             BU_recovered_count(day_lst),
             BU_quarantined_count(day_lst),
             BU_quarantined_end_count(day_lst),
-            BU_quarantined_rooms_count(day_lst, cleaning_days)]
+            BU_cleaning_rooms_count(day_lst, quar_cleaning_days,iso_cleaning_days,iso_days)]
     
