@@ -15,7 +15,7 @@
 
 from setuptools import setup
 
-# This will install the bu_covid code along with covasim 1.6.1
+# This will install the bu_covid code along with covasim 
 # from PyPI and all necessary additional libraries.
 
  
@@ -27,7 +27,7 @@ setup(name='bu_covid',
       url='https://github.com/bu-rcs/BU-COVID',
       packages=['bu_covid', ],
       package_dir={'bu_covid': 'bu_covid'},
-      install_requires=['covasim==1.6.1','python-igraph','networkx','tqdm'],
+      install_requires=['covasim==1.5.0','python-igraph','networkx','tqdm'],
 )
 
  
