@@ -495,14 +495,16 @@ class BU_cleaning_rooms_count(BU_iso_count):
             quar_sum = self.cleaning_sum(self.quar_cleaning, self.quar_cleaning_keys)
             iso_sum = self.cleaning_sum(self.iso_cleaning, self.iso_cleaning_keys)
             self.snapshots[date] = {**quar_sum, **iso_sum}
-            self.snapshots[date]['n_leaving_on_iso_today'] = 0            
+            self.snapshots[date]['n_leaving_on_iso_today'] = 0     
+            self.yesterday_date_end_quarantine = sim.people.date_end_quarantine.copy()
+            self.yesterday_quarantine = sim.people.quarantined.copy()       
             return
         # Now the simulation is running...carry on.
         ppl = sim.people
         diagnosed = safe_nan_compare(ppl.date_diagnosed, sim.t, operator.le)
         not_diagnosed = ~diagnosed
         # Is this the day they are released?
-        quar_freedom = ppl.date_end_quarantine == sim.t
+        quar_freedom = self.yesterday_date_end_quarantine == sim.t
         # not diagnosed 
         not_diagnosed = ~diagnosed
         # Quarantined yesterday?
@@ -552,7 +554,7 @@ class BU_cleaning_rooms_count(BU_iso_count):
         self.snapshots[date]['n_leaving_on_iso_today'] = on_iso_leaving
         # Copy the quarantine  list  to use tomorrow.
         self.yesterday_quarantine = sim.people.quarantined.copy()
-
+        self.yesterday_date_end_quarantine = sim.people.date_end_quarantine.copy()
 
 def snapshots_to_df(sims_complete):
     ''' Take a list of completed simulations with analyzers in the 
