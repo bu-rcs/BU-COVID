@@ -32,8 +32,23 @@ from collections import deque
 import copy
 import covasim.utils as cvu
 import itertools as it 
+import numba
+import operator 
 
- 
+def safe_nan_compare(x,y,op):
+    ''' do an operation "op" between x & y. np.nan values
+        always return a False.'''
+    result = np.full_like(x,False,dtype=np.bool)
+    if isinstance(x,np.ndarray) and isinstance(y,np.ndarray):
+        good_ind= np.isfinite(x) & np.isfinite(y)
+        result[good_ind] = op(x[good_ind],y[good_ind])
+    elif isinstance(x,np.ndarray):
+        good_ind= np.isfinite(x)
+        result[good_ind] = op(x[good_ind],y)
+    else:
+        good_ind= np.isfinite(y)
+        result[good_ind] = op(x,y[good_ind])
+    return result 
 
 class BU_res_quarantine_count(cv.Analyzer):
     '''
@@ -107,7 +122,9 @@ class BU_iso_count(BU_res_quarantine_count):
     def iso_count(self, ppl, sim_t):
         ''' ppl: sim.people
             sim_t: simulation day'''
-        diagnosed = ppl.date_diagnosed <= sim_t
+        # Avoid numpy errors comparing against nan values
+        diagnosed = safe_nan_compare(ppl.date_diagnosed, sim_t, operator.le)
+
         # not diagnosed 
         not_diagnosed = ~diagnosed
         
@@ -482,7 +499,7 @@ class BU_cleaning_rooms_count(BU_iso_count):
             return
         # Now the simulation is running...carry on.
         ppl = sim.people
-        diagnosed = ppl.date_diagnosed <= sim.t
+        diagnosed = safe_nan_compare(ppl.date_diagnosed, sim.t, operator.le)
         not_diagnosed = ~diagnosed
         # Is this the day they are released?
         quar_freedom = ppl.date_end_quarantine == sim.t
@@ -512,8 +529,8 @@ class BU_cleaning_rooms_count(BU_iso_count):
         # However if they have gone to severe or critical symptoms they go immediately to the hospital
         # and leave isolation that day. 
         # 3 cases. OR them all together
-        iso_leaving_1 = (ppl.date_diagnosed == (sim.t - self.iso_days)) & (ppl.date_recovered <= sim.t) 
-        iso_leaving_2 = (ppl.date_diagnosed < (sim.t - self.iso_days)) & (ppl.date_recovered == sim.t) 
+        iso_leaving_1 = (ppl.date_diagnosed == (sim.t - self.iso_days)) & (safe_nan_compare(ppl.date_recovered, sim.t, operator.le)) 
+        iso_leaving_2 = (ppl.date_diagnosed < (sim.t - self.iso_days)) & (safe_nan_compare(ppl.date_recovered, sim.t, operator.eq)) 
         iso_leaving_3 = (ppl.date_severe == sim.t) | \
                         (ppl.date_critical == sim.t) |  \
                         (ppl.date_dead == sim.t)   
