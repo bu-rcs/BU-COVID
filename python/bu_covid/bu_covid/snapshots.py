@@ -138,7 +138,7 @@ class BU_iso_count(BU_res_quarantine_count):
         # In isolation today based on health
         iso_today_health = not_recov & alive & not_severe & not_critical & diagnosed 
         # In isolation due to iso_days waiting period
-        iso_today_waiting = diagnosed & recov & (ppl.date_diagnosed > (sim_t - self.iso_days))
+        iso_today_waiting = diagnosed & recov & safe_nan_compare(ppl.date_diagnosed, (sim_t - self.iso_days), operator.gt)
         return iso_today_health + iso_today_waiting
  
 class BU_res_iso_count(BU_iso_count):
@@ -529,11 +529,11 @@ class BU_cleaning_rooms_count(BU_iso_count):
         # However if they have gone to severe or critical symptoms they go immediately to the hospital
         # and leave isolation that day. 
         # 3 cases. OR them all together
-        iso_leaving_1 = (ppl.date_diagnosed == (sim.t - self.iso_days)) & (safe_nan_compare(ppl.date_recovered, sim.t, operator.le)) 
-        iso_leaving_2 = (ppl.date_diagnosed < (sim.t - self.iso_days)) & (safe_nan_compare(ppl.date_recovered, sim.t, operator.eq)) 
-        iso_leaving_3 = (ppl.date_severe == sim.t) | \
-                        (ppl.date_critical == sim.t) |  \
-                        (ppl.date_dead == sim.t)   
+        iso_leaving_1 = safe_nan_compare(ppl.date_diagnosed, sim.t - self.iso_days, operator.eq) & (safe_nan_compare(ppl.date_recovered, sim.t, operator.le)) 
+        iso_leaving_2 = safe_nan_compare(ppl.date_diagnosed, sim.t - self.iso_days, operator.lt) & (safe_nan_compare(ppl.date_recovered, sim.t, operator.eq)) 
+        iso_leaving_3 = safe_nan_compare(ppl.date_severe, sim.t, operator.eq) | \
+                        safe_nan_compare(ppl.date_critical, sim.t, operator.eq) |  \
+                        safe_nan_compare(ppl.date_dead, sim.t, operator.eq)
         iso_leaving = iso_leaving_1 | iso_leaving_2 | iso_leaving_3
         
         on_iso_leaving = np.sum(iso_leaving & at_bu)
