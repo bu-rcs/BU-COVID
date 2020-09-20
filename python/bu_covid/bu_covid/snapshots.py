@@ -14,8 +14,8 @@
  
 # Default number of days that quarantine rooms are cleaned for after
 # someone leaves quarantine:
-QUAR_CLEANING_DAYS = 2   
-ISO_CLEANING_DAYS = 2 
+QUAR_CLEANING_DAYS = 1   
+ISO_CLEANING_DAYS = 1 
 ISO_DAYS = 10
 
 __all__=['snapshots_to_df','get_BU_snapshots','infection_count_to_df',
@@ -205,6 +205,7 @@ class BU_infection_count(BU_res_quarantine_count):
                 self.snapshots[date]['campResident'] = ppl.campResident[today_diag]
                 self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
                 self.snapshots[date]['category'] = ppl.category[today_diag]
+                self.snapshots[date]['campus'] = ppl.campus[today_diag]
                 self.snapshots[date]['exogenous'] = np.ones(len(today_diag[0]),dtype=np.uint8)
                 self.snapshots[date]['GI'] = np.zeros(len(today_diag[0]),dtype=np.uint8)
                 self.snapshots[date]['source'] = np.zeros(len(today_diag[0]),dtype=np.uint8)
@@ -331,6 +332,7 @@ class BU_diagnosed_count(BU_res_quarantine_count):
                 self.snapshots[date]['campResident'] = ppl.campResident[today_diag]
                 self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
                 self.snapshots[date]['category'] = ppl.category[today_diag]
+                self.snapshots[date]['campus'] = ppl.campus[today_diag]
                 self.snapshots[date]['exogenous'] = np.ones(today_diag.size,dtype=np.uint8)
                 source = [item['source'] for item in ppl.infection_log if item['target'] in today_diag]
                 for ind, val in enumerate(source):
@@ -602,7 +604,7 @@ def infection_count_to_df(sims_complete):
     ''' The infection count is the index 4 analyzer.  Convert it to 
         a pandas dataframe '''
     data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'test_cat':[],
-          'campResident':[], 'full_info_id':[], 'category':[],'exogenous':[],'GI':[],'source':[]}
+          'campResident':[], 'full_info_id':[], 'category':[],'campus':[],'exogenous':[],'GI':[],'source':[]}
     for i, sim in enumerate(sims_complete):    
         # Get the snapshot
         BU_infect = sim['analyzers'][4]
@@ -621,6 +623,7 @@ def infection_count_to_df(sims_complete):
                     data['campResident'].append(BU_infect.snapshots[date]['campResident'][k])
                     data['full_info_id'].append(BU_infect.snapshots[date]['full_info_id'][k])
                     data['category'].append(BU_infect.snapshots[date]['category'][k])
+                    data['campus'].append(BU_infect.snapshots[date]['campus'][k])
                     data['exogenous'].append(BU_infect.snapshots[date]['exogenous'][k])
                     data['GI'].append(BU_infect.snapshots[date]['GI'][k])
                     data['source'].append(BU_infect.snapshots[date]['source'][k])
@@ -742,7 +745,7 @@ def diagnosed_count_to_df(sims_complete):
     ''' The infection count is the index 4 analyzer.  Convert it to 
         a pandas dataframe '''
     data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'test_cat':[],
-          'campResident':[], 'full_info_id':[], 'category':[],'exogenous':[]}
+          'campResident':[], 'full_info_id':[], 'category':[],'campus':[],'exogenous':[]}    
     for i, sim in enumerate(sims_complete):    
         # Get the snapshot
         BU_infect = sim['analyzers'][9]
@@ -761,6 +764,7 @@ def diagnosed_count_to_df(sims_complete):
                     data['campResident'].append(BU_infect.snapshots[date]['campResident'][k])
                     data['full_info_id'].append(BU_infect.snapshots[date]['full_info_id'][k])
                     data['category'].append(BU_infect.snapshots[date]['category'][k])
+                    data['campus'].append(BU_infect.snapshots[date]['campus'][k])
                     data['exogenous'].append(BU_infect.snapshots[date]['exogenous'][k])
                     count += 1
         data['sim_num'] += count * [i]

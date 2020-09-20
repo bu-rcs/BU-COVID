@@ -118,7 +118,7 @@ def gen_BU_pop2(people_lut,class_contacts={}, household_contacts={}):
               'campResident':np.zeros(pop_size,dtype=np.uint8),
               'undergrad':np.zeros(pop_size,dtype=np.uint8),
              # 'position':pop_size * [''],
-              #'campus':pop_size * [''],
+              'campus':np.zeros(pop_size,dtype=np.uint8),
               'full_info_id':np.zeros(pop_size,dtype=np.uint32)}
     
     # Loop over the people_lut
@@ -133,7 +133,7 @@ def gen_BU_pop2(people_lut,class_contacts={}, household_contacts={}):
             BU_pop['category'][idx] = people_lut[person]['category']
             BU_pop['undergrad'][idx] = people_lut[person]['undergrad']
            # BU_pop['position'][idx] = people_lut[person]['position']  
-           # BU_pop['campus'][idx] = people_lut[person]['campus']  
+            BU_pop['campus'][idx] = people_lut[person]['campus']  
             BU_pop['campResident'][idx] = people_lut[person]['campResident']  
             BU_pop['full_info_id'][idx] = person
             
@@ -256,6 +256,7 @@ def update_sim_people(sim,BU_pop):
     # Initialize to create sim.people
     sim.initialize()
     # Add our parameters
+    sim.people['campus'] = BU_pop['campus']
     sim.people['undergrad'] = BU_pop['undergrad']
     sim.people['test_cat'] = BU_pop['test_cat']
     sim.people['category'] = BU_pop['category']

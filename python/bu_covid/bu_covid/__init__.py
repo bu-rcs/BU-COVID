@@ -19,7 +19,7 @@ import covasim.run as cr
 # Tweak the People class to fit our needs
 # =============================================================================
 # Add some people characteristics to the PeopleMeta class
-BU_attrs = ['undergrad','test_cat','category', 'campResident', 'full_info_id']
+BU_attrs = ['campus','undergrad','test_cat','category', 'campResident', 'full_info_id']  
 cv.defaults.PeopleMeta.person += BU_attrs
 cv.defaults.PeopleMeta.all_states += BU_attrs
 
