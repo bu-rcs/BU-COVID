@@ -20,14 +20,14 @@ from setuptools import setup
 
  
 setup(name='bu_covid',
-      version='0.2',
+      version='0.3',
       description='BU code library for use with Covasim.',
       author='BU',
       author_email='bgregor@bu.edu',
       url='https://github.com/bu-rcs/BU-COVID',
       packages=['bu_covid', ],
       package_dir={'bu_covid': 'bu_covid'},
-      install_requires=['covasim==1.5.0','python-igraph','networkx','tqdm'],
+      install_requires=['covasim==1.7.2','python-igraph','networkx','tqdm'],
 )
 
  
