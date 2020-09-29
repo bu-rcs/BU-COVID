@@ -22,7 +22,7 @@ __all__=['snapshots_to_df','get_BU_snapshots','infection_count_to_df',
          'diag2iso_count_to_df','severe_count_to_df','critical_count_to_df',
          'dead_count_to_df','diagnosed_count_to_df','recovered_count_to_df',
          'quarantined_count_to_df','quarantined_end_count_to_df','QUAR_CLEANING_DAYS',   
-         'ISO_CLEANING_DAYS','ISO_DAYS']
+         'ISO_CLEANING_DAYS','ISO_DAYS','safe_nan_compare']
 
 import covasim as cv
 import sciris as sc
@@ -138,7 +138,7 @@ class BU_iso_count(BU_res_quarantine_count):
         # In isolation today based on health
         iso_today_health = not_recov & alive & not_severe & not_critical & diagnosed 
         # In isolation due to iso_days waiting period
-        iso_today_waiting = diagnosed & recov & safe_nan_compare(ppl.date_diagnosed, (sim_t - self.iso_days), operator.gt)
+        iso_today_waiting = diagnosed & recov & not_severe & not_critical & safe_nan_compare(ppl.date_diagnosed, (sim_t - self.iso_days), operator.gt)
         return iso_today_health + iso_today_waiting
  
 class BU_res_iso_count(BU_iso_count):
@@ -206,15 +206,16 @@ class BU_infection_count(BU_res_quarantine_count):
                 self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
                 self.snapshots[date]['category'] = ppl.category[today_diag]
                 self.snapshots[date]['campus'] = ppl.campus[today_diag]
+                self.snapshots[date]['undergrad'] = ppl.undergrad[today_diag]
                 self.snapshots[date]['exogenous'] = np.ones(len(today_diag[0]),dtype=np.uint8)
                 self.snapshots[date]['GI'] = np.zeros(len(today_diag[0]),dtype=np.uint8)
-                self.snapshots[date]['source'] = np.zeros(len(today_diag[0]),dtype=np.uint8)
+                self.snapshots[date]['source'] = np.zeros(len(today_diag[0]),dtype=np.uint32)
                 source = [item['source'] for item in ppl.infection_log if item['target'] in today_diag[0]]
                 for ind, val in enumerate(source):
                     if val is not None:
                         self.snapshots[date]['GI'][ind] = sim.t - [item['date'] for item in ppl.infection_log if item['target'] == val][0]
                         self.snapshots[date]['exogenous'][ind] = 0 
-                        self.snapshots[date]['source'][ind] = val
+                        self.snapshots[date]['source'][ind] = ppl.full_info_id[val]
                         
 class BU_diag2iso_count(BU_res_quarantine_count):
     ''' Count every time someone in quarantine is diagnosed '''
@@ -333,11 +334,14 @@ class BU_diagnosed_count(BU_res_quarantine_count):
                 self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
                 self.snapshots[date]['category'] = ppl.category[today_diag]
                 self.snapshots[date]['campus'] = ppl.campus[today_diag]
+                self.snapshots[date]['undergrad'] = ppl.undergrad[today_diag]
                 self.snapshots[date]['exogenous'] = np.ones(today_diag.size,dtype=np.uint8)
+                self.snapshots[date]['source'] = np.zeros(today_diag.size,dtype=np.uint32)
                 source = [item['source'] for item in ppl.infection_log if item['target'] in today_diag]
                 for ind, val in enumerate(source):
                     if val is not None:
                         self.snapshots[date]['exogenous'][ind] = 0 
+                        self.snapshots[date]['source'][ind] = ppl.full_info_id[val]
 
 class BU_recovered_count(BU_res_quarantine_count):
     ''' Snapshot the demographics of anyone who is 
@@ -604,7 +608,7 @@ def infection_count_to_df(sims_complete):
     ''' The infection count is the index 4 analyzer.  Convert it to 
         a pandas dataframe '''
     data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'test_cat':[],
-          'campResident':[], 'full_info_id':[], 'category':[],'campus':[],'exogenous':[],'GI':[],'source':[]}
+          'campResident':[], 'full_info_id':[], 'category':[],'campus':[],'undergrad':[],'exogenous':[],'GI':[],'source':[]}
     for i, sim in enumerate(sims_complete):    
         # Get the snapshot
         BU_infect = sim['analyzers'][4]
@@ -624,6 +628,7 @@ def infection_count_to_df(sims_complete):
                     data['full_info_id'].append(BU_infect.snapshots[date]['full_info_id'][k])
                     data['category'].append(BU_infect.snapshots[date]['category'][k])
                     data['campus'].append(BU_infect.snapshots[date]['campus'][k])
+                    data['undergrad'].append(BU_infect.snapshots[date]['undergrad'][k])
                     data['exogenous'].append(BU_infect.snapshots[date]['exogenous'][k])
                     data['GI'].append(BU_infect.snapshots[date]['GI'][k])
                     data['source'].append(BU_infect.snapshots[date]['source'][k])
@@ -745,7 +750,7 @@ def diagnosed_count_to_df(sims_complete):
     ''' The infection count is the index 4 analyzer.  Convert it to 
         a pandas dataframe '''
     data={'sim_num':[], 'dates':[], 'days':[], 'age':[], 'test_cat':[],
-          'campResident':[], 'full_info_id':[], 'category':[],'campus':[],'exogenous':[]}    
+          'campResident':[], 'full_info_id':[], 'category':[],'campus':[],'undergrad':[],'exogenous':[],'source':[]}    
     for i, sim in enumerate(sims_complete):    
         # Get the snapshot
         BU_infect = sim['analyzers'][9]
@@ -765,7 +770,9 @@ def diagnosed_count_to_df(sims_complete):
                     data['full_info_id'].append(BU_infect.snapshots[date]['full_info_id'][k])
                     data['category'].append(BU_infect.snapshots[date]['category'][k])
                     data['campus'].append(BU_infect.snapshots[date]['campus'][k])
+                    data['undergrad'].append(BU_infect.snapshots[date]['undergrad'][k])
                     data['exogenous'].append(BU_infect.snapshots[date]['exogenous'][k])
+                    data['source'].append(BU_infect.snapshots[date]['source'][k])
                     count += 1
         data['sim_num'] += count * [i]
     return pd.DataFrame(data=data)

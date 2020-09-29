@@ -6,16 +6,24 @@ Created on Thu Jul  2 15:21:02 2020
 @author: bgregor
 """
 
+
 import covasim as cv
 import numpy as np
 import sciris as sc
 import covasim.utils as cvu
 import datetime
 from .misc import make_dt, get_daynum
+from .exception import TerrierException
+import collections
+import datetime 
+
+IMPORT_EXOGENOUS = np.array([0.00000000, 0.00000000, 0.28571429, 0.13222111, 0.00000000, 0.00000000 ,0.00000000 ,0.07142857, 0.07114942,
+                             0.21406296, 0.40228266, 0.60476382, 0.00000000 ,0.19232560])
 
 __all__=['test_post_quar', 'gen_periodic_testing_interventions','gen_large_dorm_testing_interventions',
          'test_household_when_pos','pulsed_infections_network','gen_undergrad_testing_interventions','contact_tracing_sens_spec',
-         'import_infections_network','import_infections_percent_network','pulsed_infections_diffuse']
+         'import_infections_network','import_infections_percent_network','pulsed_infections_diffuse','gen_periodic_testing_interventions_real',
+         'IMPORT_EXOGENOUS','import_infections_exogenous_network']
 
 class test_post_quar(cv.Intervention):
     '''
@@ -516,7 +524,171 @@ def gen_undergrad_testing_interventions(BU_pop, num_days, test_period_large = 3,
     # and that's all, folks
     return intervs 
         
+#%%
+def gen_periodic_testing_interventions_real(BU_pop, num_days,
+                                             test_dist={0: 0.12, 1: 0.152, 2: 0.152, 3: 0.152, 4: 0.152, 5: 0.152, 6: 0.12},
+                                             start_date='2020-09-02',
+                                             **kwargs):
+    ''' Test undergrads every 3-4 days
+        Everyone else is tested 1x/week
+        
+        This is a variation on gen_undergrad_testing_interventions.  For that one the testing is evenly
+        spread out around the week.  This one sets a testing target by the day of the week, tries to 
+        meet that target, and then spreads out any remaining testing evenly.  The idea is a testing
+        distribution that matches the one seen for real where there are more tests M-F than on the weekends.
+        
+        BU_pop:  BU population dictionary
+        num_days: length of simulation
+        
+        test_dist: Dictionary for days of the week that specifies the target
+            distribution. Keys are day numbers (0 is Sunday, etc). Sum of test_dist
+            should be 1. 
+            
+        start_date : date strings of the intervention range. Req'd to get day of week calculations done.
+        ...and also all the regular arguments to cv.test_num
+        
+        Returns: A list of cv.test_num interventions
+    '''
+    # Verify that test_dist sums close to 1
+    if sum(test_dist.values())-1 > 1e-6:
+        raise TerrierException('test_dist failed to sum to a value close to 1.')
+    
+    # Split the uids into 2 populations - frequent testes and everyone else who's test 1/week.
+    # As this was originally for large dorms wherever it says "large" 
+    # think "frequent"
+    # 96 hours == 4 days
+    # 168 hours == 7 days
+    # Ignore anyone else.
+    uids_large = BU_pop['uid'][np.where(BU_pop['labTestEveryNHours'] == 96)].copy()
+    uids_other = BU_pop['uid'][np.where(BU_pop['labTestEveryNHours'] == 168)].copy()
+    base_excludes = BU_pop['uid'][np.isin(BU_pop['labTestEveryNHours'],[96,168],invert=True)].copy()
+    
+    # shuffle 'em up
+    np.random.shuffle(uids_large)
+    np.random.shuffle(uids_other)
 
+    # This is fixed to make the programming quicker.  The undergrads get 
+    # tested every 3-4 days.  Everyone else is 1x/week. Most testing must
+    # happen on weekedays per the test_dist distribution.
+    # undergrad testing groups:
+    # M-R, T-F, W-Sa, Su-W.
+    thresh = 0.33 # Less on the weekend but wednesday is the same as the other days of the week.
+    # A threshold of 0.33 balances things out without creating a jump or dip on Wednesday.
+    # loop through the large group, and assign them to the testing groups.
+    # In hindsight this is probably not the most straightforward way to handle 
+    # this but it's too much effort to fix at the moment.
+    large_test_groups = {'m_r':[],
+                    't_f':[],
+                    'w_s':[],
+                    'u_w':[],}
+    group_lut={'m_r':[0,1,0,0,1,0,0],
+               't_f':[0,0,1,0,0,1,0],
+               'w_s':[0,0,0,1,0,0,1],
+               'u_w':[1,0,0,1,0,0,0],}
+    for uid in uids_large:
+        if np.random.uniform() < thresh:
+            # weekend group
+            if np.random.uniform() < 0.5:
+                large_test_groups['w_s'].append(uid)
+            else:
+                large_test_groups['u_w'].append(uid)
+        else:
+            if np.random.uniform() < 0.5:
+                large_test_groups['m_r'].append(uid)
+            else:
+                large_test_groups['t_f'].append(uid)            
+    # Now for everyone who is NOT an undergraduate test 1x/week.
+    # Again bias the testing towards weekdays. Sort everyone into
+    # 7 testing bins.
+    weekly_test_groups = {0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: []} 
+    # This can be sorted using numpy binning...
+    # retrieve daily fractions:
+    daily = np.array([0] + list(test_dist.values()))
+    # Wednesday is over-sampled due to the two weekend undergrad groups
+    # using it.  Reduce it by 25%
+    #daily[4] *= 0.75
+    # Now renormalize the daily distribution and create sorting bins
+    bins = np.cumsum(daily / np.sum(daily))
+    # make the last bin a wee higher than 1 just to make sure the sorting
+    # works if a value 1.0 is pulled from the RNG
+    bins[-1] += 0.005
+    dice = np.random.uniform(size = len(uids_other))
+    # now find indices for all uids_other for the group they belong to.
+    inds = np.digitize(dice,bins) - 1
+    # For every uid, sort into a group using the inds
+    for uid,idx in zip(uids_other,inds):
+        weekly_test_groups[idx].append(uid)
+    
+    # A list of Interventions    
+    intervs = []
+    
+    # Do the frequent testers first.  We need to figure out the day of the 
+    # week from the start date and the number of days.
+
+    # Python returns this as Monday=0. We used Sunday=0. Fix that.
+    ring = collections.deque([0,1,2,3,4,5,6],maxlen=7)
+    ring.rotate(1)
+    ring = tuple(ring) # Convert to a ring    
+    
+    for group in large_test_groups:
+        # for each day of the simulation fill into an ndarray 
+        # whether or not we're testing today.
+        test_days = np.zeros(num_days,dtype=np.int32)
+        cur_day = make_dt(start_date) 
+        for i in range(num_days):
+            weekday = ring.index(cur_day.weekday())
+            if group_lut[group][weekday]:
+                test_days[i] = 1
+            cur_day += datetime.timedelta(days=1)
+        # Multiple by the size of this group
+        daily_tests = test_days * len(large_test_groups[group])
+        # Build a list of every other person who is not in this subgroup
+        # and exclude them.
+        excludes = list(base_excludes)
+        for subgroup in large_test_groups:
+            if subgroup == group:
+                continue
+            excludes += large_test_groups[subgroup]
+        # and now the other test groups
+        for w in weekly_test_groups:
+            excludes += weekly_test_groups[w]
+        excludes.sort()
+        excludes = np.array(excludes)
+        exclude_vals = np.zeros(excludes.shape,dtype=np.float32)
+        # And now create the intervention.
+        intervs.append(cv.test_num(daily_tests=daily_tests,
+                                   subtarget={'inds':excludes, 'vals':exclude_vals},
+                                   **kwargs))
+    # And now do something similar for the 1/week people
+    for day in weekly_test_groups:
+        test_days = np.zeros(num_days,dtype=np.int32)
+        cur_day = make_dt(start_date) 
+        # this could be vectorized but this works
+        for i in range(num_days):
+            weekday = ring.index(cur_day.weekday())
+            if weekday == day:
+                test_days[i] = 1
+            cur_day += datetime.timedelta(days=1)        
+        daily_tests = test_days * len(large_test_groups[group])
+        excludes = list(base_excludes)
+        # exclude anyone in the high frequency group
+        for group in large_test_groups:
+            excludes += large_test_groups[subgroup]
+        # and any weekly testers who test on a different day.
+        for w in weekly_test_groups:
+            if w == day:
+                continue
+            excludes += weekly_test_groups[w]
+        excludes.sort()
+        excludes = np.array(excludes)
+        exclude_vals = np.zeros(excludes.shape,dtype=np.float32)
+        # And now create the intervention.
+        intervs.append(cv.test_num(daily_tests=daily_tests,
+                                   subtarget={'inds':excludes, 'vals':exclude_vals},
+                                   **kwargs))
+    return intervs 
+
+#%%
 
 # contact tracing with sensitivity and specificity
 class contact_tracing_sens_spec(cv.Intervention):
@@ -826,3 +998,114 @@ class pulsed_infections_diffuse(pulsed_infections_network):
         # Now infect those targets
         sim.people.infect(inds=np.array(targets, dtype = np.int32))
         return    
+
+
+class import_infections_exogenous_network(cv.Intervention):
+    '''
+    Infects a set of people across networks.  
+    '''
+    
+    def __init__(self, days, import_count = 1, import_exogenous = IMPORT_EXOGENOUS,import_sampling = 'poisson', **kwargs):
+        super().__init__(**kwargs) # Initialize the Intervention object
+        self._store_args() # Store the input arguments so the intervention can be recreated
+        if import_count >= 1:
+            self.import_count = import_count
+        else:
+            raise Exception('import_count must be >= 1')
+        self.import_exogenous = import_exogenous
+        self.days = np.array(days, dtype = np.bool)
+        self.import_sampling = import_sampling.strip().lower()
+        self.start_day = None
+        self.end_day = None
+        return
+
+
+    def initialize(self, sim):
+        ''' Fix the dates and number of tests '''
+        # Handle days
+        self.start_day   = sim.day(self.start_day)
+        self.end_day     = sim.day(self.end_day)
+        self.initialized = True
+        return
+
+    def apply(self, sim):
+        # If today is not a pulse day then return.
+        if not self.days[sim.t]:
+            return
+        
+        # Use either constant infection count or a Poisson average
+        import_count = self.import_count
+        if self.import_sampling == 'poisson':
+            import_count = cvu.poisson(import_count)  
+        hosp_max = sim.people.count('severe')   > sim['n_beds_hosp'] if sim['n_beds_hosp'] else False # Check for acute bed constraint
+        icu_max  = sim.people.count('critical') > sim['n_beds_icu']  if sim['n_beds_icu']  else False # Check for ICU bed constraint
+
+        susceptible_check = sim.people.susceptible
+        # rescale import_exogenous to to be sum = 1
+        import_exogenous = self.import_exogenous
+        multinomial_p = import_exogenous/import_exogenous.sum()
+        # multinomial
+        import_subgroup = np.random.multinomial(import_count, multinomial_p, size=1)
+        
+        # define subgroup 
+        at_BUMC = sim.people.campus > 1
+        at_CRC = sim.people.campus < 2
+        Affiliate = sim.people.category > 3 
+        Faculty = (sim.people.category < 3) & (sim.people.category >1)
+        Staff = ( sim.people.category < 4) & (sim.people.category > 2)
+        Student  = sim.people.category < 2 
+        Oncampus = sim.people.campResident > 0
+        Offcampus = sim.people.campResident < 1
+        Grad = sim.people.undergrad < 1
+        Undergrad = sim.people.undergrad > 0
+ 
+        # define exclusive subgroup 
+        Affiliate_BUMC = Affiliate & at_BUMC & susceptible_check
+        Faculty_BUMC = Faculty & at_BUMC & susceptible_check
+        Staff_BUMC = Staff & at_BUMC & susceptible_check
+        Grad_offcampus_BUMC = Student & Grad & Offcampus & at_BUMC & susceptible_check
+        Undergrad_offcampus_BUMC = Student & Undergrad & Offcampus & at_BUMC & susceptible_check
+        Grad_oncampus_BUMC = Student & Grad & Oncampus & at_BUMC & susceptible_check
+        Undergrad_oncampus_BUMC = Student & Undergrad & Oncampus & at_BUMC & susceptible_check
+        
+        Affiliate_CRC = Affiliate & at_CRC & susceptible_check
+        Faculty_CRC = Faculty & at_CRC & susceptible_check
+        Staff_CRC = Staff & at_CRC & susceptible_check
+        Grad_offcampus_CRC = Student & Grad & Offcampus & at_CRC & susceptible_check
+        Undergrad_offcampus_CRC = Student & Undergrad & Offcampus & at_CRC & susceptible_check
+        Grad_oncampus_CRC = Student & Grad & Oncampus & at_CRC & susceptible_check
+        Undergrad_oncampus_CRC = Student & Undergrad & Oncampus & at_CRC & susceptible_check
+        
+        subgroup_list =[Affiliate_BUMC,Faculty_BUMC,Staff_BUMC,Grad_offcampus_BUMC,Undergrad_offcampus_BUMC,Grad_oncampus_BUMC,Undergrad_oncampus_BUMC,
+                        Affiliate_CRC,Faculty_CRC,Staff_CRC,Grad_offcampus_CRC,Undergrad_offcampus_CRC,Grad_oncampus_CRC,Undergrad_oncampus_CRC]
+        
+        # infect people
+        for i in range(import_subgroup.shape[1]):
+            tmp_inds = cvu.true(subgroup_list[i])   
+            if len(tmp_inds) > 0: 
+                importation_inds = cvu.choose(max_n=len(tmp_inds), n=min(import_subgroup[0,i],len(tmp_inds)) )
+                sim.people.infect(inds=tmp_inds[importation_inds],hosp_max=hosp_max, icu_max=icu_max, layer='importation')
+    
+        
+        return
+    
+    @staticmethod
+    def get_days_arr(start_day, end_day, import_day):
+        ''' Returns a numpy array for the days to apply a pulse.
+        start_day, end_day are date strings.
+        import_day is th enumber of the day of the week to apply
+        the import.  Sunday=0.'''
+        num_days = (make_dt(end_day) - make_dt(start_day)).days + 1
+
+        days_arr = np.zeros(num_days, dtype=np.int32)
+        # datetime for the start of the sim
+        sdt = make_dt(start_day)
+        # And a 1 day time delta
+        td = datetime.timedelta(days=1)
+        # What day of the week (number) do you want pulses on?
+        # Friday = 5 (sunday is 0)
+        for i in range(num_days):
+            today = sdt + i * td
+            if get_daynum(today) == import_day:
+                days_arr[i] = 1
+        return days_arr

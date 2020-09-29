@@ -36,11 +36,11 @@ def_flt = cv.defaults.default_float
 
 #%%
 def load_people_info(pop_info_path):
-    ''' Read the pop info file.  Header:
+    ''' Read the pop info file.  
+        Header:
         
-        id,age,sex,group,category,position,campus
-        
-        The last 2 fields are strings, the rest are ints.
+        id,age,sex,TestCategory,LabTestEveryNHours,Residence,Affiliation,Campus,Undergrad
+ 
         Turn the into a dictionary with id:{rest of data}
     
     '''
@@ -63,7 +63,7 @@ def load_people_info(pop_info_path):
                     lut[uid] = dict(zip(keys,tmp)) 
             except Exception as e:
                 print('ERROR at line: %s' % num)
-                print(e)
+                print(e)   
     return lut
 
 #%%
@@ -107,7 +107,7 @@ def gen_BU_pop2(people_lut,class_contacts={}, household_contacts={}):
     pop_size = len(lut)
     
     # Initialize the population object. Add our extra fields.
-    # Also cut down on the size of our fields where possible.
+    # Also cut down on the size of our fields where possible
     BU_pop = {'age':np.full(pop_size,0,dtype=def_flt), 
               'contacts':pop_size * [None], 
               'layer_keys':list(contact_dicts.keys()),
@@ -119,24 +119,27 @@ def gen_BU_pop2(people_lut,class_contacts={}, household_contacts={}):
               'undergrad':np.zeros(pop_size,dtype=np.uint8),
              # 'position':pop_size * [''],
               'campus':np.zeros(pop_size,dtype=np.uint8),
+              'labTestEveryNHours':np.full(pop_size,np.iinfo(np.uint32).max, dtype=np.uint32),
               'full_info_id':np.zeros(pop_size,dtype=np.uint32)}
     
     # Loop over the people_lut
     # fill in the age & sex of everyone found there.
+    #id,age,sex,TestCategory,LabTestEveryNHours,Residence,Affiliation,Campus,Undergrad
     for person in people_lut:
         if person in lut:
             # index found.  Fill in values.
             idx = lut[person]
             BU_pop['age'][idx] = people_lut[person]['age']  
             BU_pop['sex'][idx] = people_lut[person]['sex']  
-            BU_pop['test_cat'][idx] = people_lut[person]['test_cat']
-            BU_pop['category'][idx] = people_lut[person]['category']
-            BU_pop['undergrad'][idx] = people_lut[person]['undergrad']
+            BU_pop['test_cat'][idx] = people_lut[person]['TestCategory']
+            BU_pop['category'][idx] = people_lut[person]['Affiliation']
+            BU_pop['undergrad'][idx] = people_lut[person]['Undergrad']
            # BU_pop['position'][idx] = people_lut[person]['position']  
-            BU_pop['campus'][idx] = people_lut[person]['campus']  
-            BU_pop['campResident'][idx] = people_lut[person]['campResident']  
+            BU_pop['campus'][idx] = people_lut[person]['Campus']  
+            BU_pop['campResident'][idx] = people_lut[person]['Residence']  
+            BU_pop['labTestEveryNHours'][idx] = people_lut[person]['LabTestEveryNHours']
             BU_pop['full_info_id'][idx] = person
-            
+
 
     # Now loop through the lut.  For each student id fill their
     # contact lists. For each contact list convert from student ID
