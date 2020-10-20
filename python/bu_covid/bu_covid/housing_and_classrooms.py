@@ -62,7 +62,7 @@ def gen_daily_interventions(start_date,end_date,layers,layer_days,changes,interv
 def get_contact_list(g):
     ''' Return a list of contact lists from a graph.
         g is an igraph graph
-        layer_name is the layer being constructed, 'sun','mon', etc '''
+    '''
     edge_list = g.get_edgelist()
     edge_list += [(x[1],x[0]) for x in edge_list] #  Add the reverse connections
     edge_list.sort()

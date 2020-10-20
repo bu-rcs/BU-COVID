@@ -356,7 +356,7 @@ class pulsed_infections_network(cv.Intervention):
     **Examples**::
 
         # days_arr is 1 for every Friday. Infect 10 people.
-        interv = bu.pulsed_infections(BU_pop['contacts'],days_arr, layer_name='household', pulse_count=10, network_count=1)
+        interv = bu.pulsed_infections(BU_pop['contacts'],days_arr, layer_name='household', pulse_count=10)
     '''
     def __init__(self, contacts, days, layer_name = 'household', pulse_count = 10, pulse_sampling = 'poisson', **kwargs):
         super().__init__(**kwargs) # Initialize the Intervention object

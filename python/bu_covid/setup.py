@@ -27,7 +27,7 @@ setup(name='bu_covid',
       url='https://github.com/bu-rcs/BU-COVID',
       packages=['bu_covid', ],
       package_dir={'bu_covid': 'bu_covid'},
-      install_requires=['covasim==1.7.2','python-igraph','networkx','tqdm'],
+      install_requires=['covasim==1.7.2','numba==0.50.1','python-igraph','networkx','tqdm','pytest==6.1.1'],
 )
 
  

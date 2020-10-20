@@ -11,10 +11,13 @@
 ##
 ## ---------------------------
 ##
-#  The sciris-based parallelizatio in covasim ran into memory errors
+#  The sciris-based parallelization in covasim ran into memory errors
 #  when run on 28-core machines so we wrote our own. This works without 
 #  errors on 64-core machines.  Each Python process in the multiprocessing
-#  pool handles 1 simulation and is then replaced with a fresh process.
+#  pool handles 1 simulation and is then replaced with a fresh process. Each
+#  completed simulation is pickled and written to disk to avoid memory 
+#  consumption in the main process. After all simulations are completed the
+#  pickled simulations are serially unpickled by the main process.
 #
 #  By default this calls the simulation shrink() method which strips out the
 #  People object to save RAM.  Reading in 1000 simulations with 30,000 people

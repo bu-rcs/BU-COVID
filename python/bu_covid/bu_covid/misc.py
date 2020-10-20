@@ -20,6 +20,7 @@ import networkx as nx
 import zipfile
 import tqdm
 
+from .exception import TerrierException
 
 import covasim as cv
  
@@ -70,8 +71,10 @@ def load_people_info(pop_info_path):
 
 def make_dt(day):
     ''' Make a Python datetime object. day is YYYY-MM-DD'''
-    return datetime.datetime.strptime(day,'%Y-%m-%d') 
-
+    try:
+        return datetime.datetime.strptime(day,'%Y-%m-%d') 
+    except ValueError as e:
+        raise TerrierException(e)
 
 def get_daynum(dt):
     ''' dt: datetime object. Return the number of the day of the week'''
@@ -265,9 +268,9 @@ def update_sim_people(sim,BU_pop):
     sim.people['category'] = BU_pop['category']
     sim.people['campResident'] = BU_pop['campResident']
     sim.people['full_info_id'] = BU_pop['full_info_id']
+    sim.people['labTestEveryNHours'] = BU_pop['labTestEveryNHours']
     # And that's it...
-
- 
+  
 #%%
 def sim_results_to_df(sims_complete):
     ''' Takes a list of completed sims.  Returns

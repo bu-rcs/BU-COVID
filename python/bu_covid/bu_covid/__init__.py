@@ -29,9 +29,8 @@ cv.defaults.PeopleMeta.all_states += BU_attrs
 
 # =============================================================================
 # Update the Multisim plot() function to properly pass on the 
-# show_args argument to the main plotting function.
+# show_args argument to the main plotting function.  This is fixed in newer versions.
 # =============================================================================
-
 def new_plot(self, to_plot=None, inds=None, plot_sims=False, color_by_sim=None, max_sims=5, colors=None, labels=None, alpha_range=None, plot_args=None, show_args=None, **kwargs):
     # Plot a single curve, possibly with a range
     if not plot_sims and self.which in ['combined', 'reduced']:
@@ -111,8 +110,6 @@ def new_plot(self, to_plot=None, inds=None, plot_sims=False, color_by_sim=None, 
             fig = sim.plot(fig=fig, to_plot=to_plot, colors=colors[s], labels=merged_labels, plot_args=merged_plot_args, show_args=merged_show_args, **kwargs)
 
     return fig
-
-
 cr.MultiSim.plot = new_plot
 
 from .misc  import *
