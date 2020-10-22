@@ -29,10 +29,9 @@ import sciris as sc
 import numpy as np
 import pandas as pd
 from collections import deque
-import copy
-import covasim.utils as cvu
+
+
 import itertools as it 
-import numba
 import operator 
 
 def safe_nan_compare(x,y,op):
@@ -90,6 +89,11 @@ class BU_res_quarantine_count(cv.Analyzer):
     def apply(self, sim):
         for ind in cv.interventions.find_day(self.days, sim.t):
             date = self.dates[ind]
+            # if sim didn't start on day 0 back-fill in missing days with 0.
+            if sim.t > 0 and len(self.snapshots) == 0:
+                for i in range(sim.t):
+                    self.snapshots[self.dates[i]] = 0
+
             # campResident is: 0 off campus, 1 on campus, 2 large dorm on campus
             #sim.people.quarantined is a Boolean array of everyone who is quarantined
             self.snapshots[date] = np.sum(np.logical_and(sim.people.quarantined,sim.people.campResident > 0)) 
@@ -150,6 +154,10 @@ class BU_res_iso_count(BU_iso_count):
             if sim.t == 0:
                 self.snapshots[date] = 0
                 return  # 1st day no one can be isolated.
+            # if sim didn't start on day 0 back-fill in missing days with 0.
+            if sim.t > 0 and len(self.snapshots) == 0:
+                for i in range(sim.t):
+                    self.snapshots[self.dates[i]] = 0
             # campResident is: 0 off campus, 1 on campus, 2 large dorm on campus
             at_bu = sim.people.campResident > 0
             self.snapshots[date] = np.sum(self.iso_count(sim.people, sim.t) & at_bu)
@@ -162,7 +170,11 @@ class BU_nonres_quarantine_count(BU_res_quarantine_count):
     def apply(self, sim):
         for ind in cv.interventions.find_day(self.days, sim.t):
             date = self.dates[ind]
-           # import pdb  ; pdb.set_trace()
+            # if sim didn't start on day 0 back-fill in missing days with 0.
+            if sim.t > 0 and len(self.snapshots) == 0:
+                for i in range(sim.t):
+                    self.snapshots[self.dates[i]] = 0
+
             # campResident is: 0 off campus, 1 on campus, 2 large dorm on campus
             #sim.people.quarantined is a Boolean array of everyone who is quarantined
             self.snapshots[date] = np.sum(np.logical_and(sim.people.quarantined,sim.people.campResident < 1)) 
@@ -177,7 +189,10 @@ class BU_nonres_iso_count(BU_iso_count):
             if sim.t == 0:
                 self.snapshots[date] = 0
                 return  # 1st day no one can be isolated.            
-                
+            # if sim didn't start on day 0 back-fill in missing days with 0.
+            if sim.t > 0 and len(self.snapshots) == 0:
+                for i in range(sim.t):
+                    self.snapshots[self.dates[i]] = 0     
             # campResident is: 0 off campus, 1 on campus, 2 large dorm on campus
             not_at_bu = sim.people.campResident < 1
             self.snapshots[date] = np.sum(self.iso_count(sim.people, sim.t) & not_at_bu)
@@ -191,6 +206,7 @@ class BU_infection_count(BU_res_quarantine_count):
         ppl = sim.people
         for ind in cv.interventions.find_day(self.days, sim.t):
             date = self.dates[ind]
+            
             # They're diagnosed today if their diagnosis date equals today's date.
             #today_diag = np.where(ppl.date_diagnosed.astype(np.int32) == sim.t)
             today_diag = np.where(ppl.date_exposed.astype(np.int32) == sim.t)
@@ -396,28 +412,7 @@ class BU_quarantined_count(BU_res_quarantine_count):
                 self.snapshots[date]['campResident'] = ppl.campResident[today_diag]
                 self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
                 self.snapshots[date]['category'] = ppl.category[today_diag]
-
-#class BU_quarantined_end_count(BU_res_quarantine_count):
-#    ''' Snapshot the demographics of anyone who is 
-#        infected on any given day '''
-#    def apply(self,sim):
-#        ppl = sim.people
-#        for ind in cv.interventions.find_day(self.days, sim.t):
-#            date = self.dates[ind]
-#            # They're diagnosed today if their diagnosis date equals today's date.
-#            today_diag = cvu.true(ppl.date_end_quarantine==sim.t)
-#            #today_diag = np.where(ppl.date_end_quarantine.astype(np.int32) == sim.t)
-#            # This stores several quantities on each date:
-#            # list of ages of infected
-#            # list of group (student/faculty/etc)
-#            # etc. Only store them if there is something found.
-#            if len(today_diag) > 0:
-#                self.snapshots[date] = {}
-#                self.snapshots[date]['age'] = ppl.age[today_diag]
-#                self.snapshots[date]['test_cat'] = ppl.test_cat[today_diag]
-#                self.snapshots[date]['campResident'] = ppl.campResident[today_diag]
-#                self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
-#                self.snapshots[date]['category'] = ppl.category[today_diag]
+ 
 
 class BU_quarantined_end_count(BU_res_quarantine_count):
     ''' Count every time someone in quarantine is diagnosed '''
@@ -441,12 +436,7 @@ class BU_quarantined_end_count(BU_res_quarantine_count):
     # Store today's quarantine numbers for next time
         self.yesterday_quarantine = sim.people.quarantined.copy()
 
-
-# For the output, I think we could add 4 extra columns in the snapshots_int*.csv: 
-#     number of quarantine room unavailable due to cleaning (on-campus), number of 
-#     quarantine room unavailable due to cleaning (off-campus), number of isolation
-#     room unavailable due to cleaning (on-campus), number of isolation room 
-#     unavailable due to cleaning (off-campus).
+ 
 class BU_cleaning_rooms_count(BU_iso_count):
     ''' Count the number of isolations rooms in use, including ones
     undergoing cleaning for a specified number of days. This one will record a 4-element
@@ -497,13 +487,20 @@ class BU_cleaning_rooms_count(BU_iso_count):
         ind = ind[0]
         date = self.dates[ind]
         # On day 1 do nothing.
-        if sim.t == 0:
+        if not hasattr(self, 'yesterday_date_end_quarantine') or not hasattr(self, 'yesterday_quarantine'):
             quar_sum = self.cleaning_sum(self.quar_cleaning, self.quar_cleaning_keys)
             iso_sum = self.cleaning_sum(self.iso_cleaning, self.iso_cleaning_keys)
             self.snapshots[date] = {**quar_sum, **iso_sum}
             self.snapshots[date]['n_leaving_on_iso_today'] = 0     
             self.yesterday_date_end_quarantine = sim.people.date_end_quarantine.copy()
             self.yesterday_quarantine = sim.people.quarantined.copy()       
+            # Now, in the case where the initial timestep starts at a time > 0, backfill
+            # the dates into the snapshot so the output works  correctly.
+            if sim.t > 0:
+                for i in range(0,sim.t):
+                    tmp = sim.date(i)
+                    self.snapshots[tmp] = {**quar_sum, **iso_sum}
+                    self.snapshots[tmp]['n_leaving_on_iso_today'] = 0   
             return
         # Now the simulation is running...carry on.
         ppl = sim.people
