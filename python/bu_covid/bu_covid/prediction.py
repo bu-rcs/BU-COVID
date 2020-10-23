@@ -121,9 +121,9 @@ def import_community_test_info(sim, info_file):
                 # Mark as not susceptible
                 sim.people.susceptible[i] = False
                 # If there's a positive collection date before the start of the simulation 
-                # set it to zero.
+                # set it to nan so it will be ignored.
                 if person['PositiveCollectDate'] < 0:
-                    sim.people.date_pos_test[i] = 0
+                    sim.people.date_pos_test[i] = np.nan 
                 # Check when they were positive. If more than 14 days
                 # before the start date then mark as recovered.
                 if person['PositiveCollectDate'] <= -sim.pars['quar_period']:
@@ -133,22 +133,22 @@ def import_community_test_info(sim, info_file):
                     sim.people.symptomatic[i] = False
                     sim.people.severe[i]      = False
                     sim.people.critical[i]    = False
-                    # Set the recovery date to the start of the simulation
-                    sim.people.date_recovered[i] = 0   
+                    # Set the recovery date to nan so it will be ignored in covasim stats
+                    sim.people.date_recovered[i] = np.nan   
                     
                 else: # They're going to get a positive collection date when the sim gets there. Let's
                     sim.people.date_pos_test[i] = person['PositiveCollectDate']
                     date_exposed = person['PositiveCollectDate'] - int(sim.people.labTestEveryNHours[i] / 2)
                     # Was this exposure date at or after the start of the simulation?
                     if date_exposed < 0:
-                        sim.people.date_exposed[i] = 0
+                        sim.people.date_exposed[i] = np.nan 
                     else:
                         sim.people.date_exposed[i] = date_exposed
             if person['RecoverDate']:
                 # They have a recovery date.  If before the start of the simulation,
                 # set it to 0. Otherwise, set it.
                 if person['RecoverDate'] < 0:
-                    sim.people.date_recovered[i] = 0
+                    sim.people.date_recovered[i] = np.nan 
                 else:
                     sim.people.date_recovered[i] = person['RecoverDate']
                 # And make sure that covasim knows they recovered
@@ -166,13 +166,13 @@ def import_community_test_info(sim, info_file):
                     sim.people.date_tested[i] = person['LastTestCollectDate']
             if person['DiagnoseDate']:
                 if person['DiagnoseDate'] < 0:
-                    sim.people.date_diagnosed[i] = 0 
+                    sim.people.date_diagnosed[i] = np.nan 
                 else:
                     sim.people.date_diagnosed[i] = person['DiagnoseDate']
     
             if person['LatestSymptomaticDate']:
                 if person['LatestSymptomaticDate'] < 0:
-                    sim.people.date_symptomatic[i] = 0
+                    sim.people.date_symptomatic[i] = np.nan 
                 else:
                     sim.people.date_symptomatic[i] = person['LatestSymptomaticDate']
             if person['EndQuarantineDate']:
@@ -187,7 +187,7 @@ def import_community_test_info(sim, info_file):
                 sim.people.date_known_contact[i] = person['DateKnownContact']
             if person['DateOfDeath']:
                 if person['DateOfDeath'] < 0:
-                    sim.people.date_dead[i] = 0
+                    sim.people.date_dead[i] = np.nan 
                     sim.people.exposed[i]     = False
                     sim.people.infectious[i]  = False
                     sim.people.symptomatic[i] = False
