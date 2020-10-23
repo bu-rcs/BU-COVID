@@ -207,7 +207,7 @@ class BU_infection_count(BU_res_quarantine_count):
         for ind in cv.interventions.find_day(self.days, sim.t):
             date = self.dates[ind]
             
-            # They're diagnosed today if their diagnosis date equals today's date.
+            # They're infected today if their exposure date equals today's date.
             #today_diag = np.where(ppl.date_diagnosed.astype(np.int32) == sim.t)
             today_diag = np.where(ppl.date_exposed.astype(np.int32) == sim.t)
             # This stores several quantities on each date:
@@ -232,7 +232,8 @@ class BU_infection_count(BU_res_quarantine_count):
                         self.snapshots[date]['GI'][ind] = sim.t - [item['date'] for item in ppl.infection_log if item['target'] == val][0]
                         self.snapshots[date]['exogenous'][ind] = 0 
                         self.snapshots[date]['source'][ind] = ppl.full_info_id[val]
-                        
+                     
+                     
 class BU_diag2iso_count(BU_res_quarantine_count):
     ''' Count every time someone in quarantine is diagnosed '''
     def apply(self,sim):
