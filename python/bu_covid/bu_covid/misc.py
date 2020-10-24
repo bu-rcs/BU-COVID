@@ -72,7 +72,12 @@ def load_people_info(pop_info_path):
 def make_dt(day):
     ''' Make a Python datetime object. day is YYYY-MM-DD'''
     try:
-        return datetime.datetime.strptime(day,'%Y-%m-%d') 
+        # allow for alternate format, used in debugging
+        if day.find('/') < 0:
+            return datetime.datetime.strptime(day,'%Y-%m-%d') 
+        else:
+            tmp = [int(x) for x in day.split('/')]
+            return datetime.datetime(tmp[2], tmp[0], tmp[1])
     except ValueError as e:
         raise TerrierException(e)
 

@@ -106,146 +106,140 @@ def import_community_test_info(sim, info_file):
     # These columns in sim.people will need to be calculated 
     # to make sure they're consistent with the dates
     # quarantined, recov, date_exposed
-    start_dt = make_dt(sim.date(0))
+    count = 0
     for i,info_id in enumerate(sim.people.full_info_id):
-        try:
-            #if info_id == 29291593 or info_id == 84647777:
-               # import pdb ; pdb.set_trace()
-            if info_id not in id_data:
-                print('ERROR: full_info_id %s not found in %' % (info_id,info_file))
-                continue
-            person = id_data[info_id]
-            # Guard each with an if statement - missing dates are None values in 
-            # the id_data dictionaries
-            if person['PositiveCollectDate'] != None:
-                # If there's a positive collection date before the start of the simulation 
-                # set it to nan so it will be ignored.
-               # if person['PositiveCollectDate'] < 0:
-               #     sim.people.date_pos_test[i] = np.nan 
-                # Check when they were positive. If more than 14 days
-                # before the start date then mark as recovered.
-                if person['PositiveCollectDate'] <= -sim.pars['quar_period']:
-                    sim.people.recovered[i]   = True
-                    sim.people.exposed[i]     = False
-                    sim.people.infectious[i]  = False
-                    sim.people.symptomatic[i] = False
-                    sim.people.severe[i]      = False
-                    sim.people.critical[i]    = False
-                    sim.people.quarantined[i]   = False
-                    sim.people.symptomatic[i]   = False
-                    # Set the recovery date to nan so it will be ignored in covasim stats
-                    sim.people.date_recovered[i] = -sim.pars['quar_period'] #np.nan   
-                elif person['PositiveCollectDate'] > -sim.pars['quar_period'] \
-                    and person['PositiveCollectDate'] <= 0:
-                    sim.people.date_pos_test[i] = person['PositiveCollectDate']
-                    sim.people.exposed[i]     = True
-                    sim.people.diagnosed[i]   = True   
-                    sim.people.severe[i]      = False  # assumption 
-                    sim.people.critical[i]    = False  # assumption
-                    sim.people.infectious[i]  = True   # assumption
-                    sim.people.recovered[i]   = False
-                    sim.people.quarantined[i]   = False                     
-                    # This is copied from people.infect(). This person needs to be offically
-                    # infected. We'll use asymptomatic for the import.
-                    dur_asym2rec = cvu.sample(sim.pars['dur']['asym2rec'], size=1)
-                    # Estimated date they recover
-                    sim.people.date_recovered[i] = person['PositiveCollectDate'] + dur_asym2rec  
-
-                    # Maybe the exposure date should be half the test interval plus the days it takes
-                    # for a test to be positive.
-                    date_exposed = person['PositiveCollectDate'] - int(sim.people.labTestEveryNHours[i] / 2 / 24)
-                    sim.people.date_exposed[i] = date_exposed
-                elif person['PositiveCollectDate'] > 0: 
-                    # They're going to get a positive collection date when the sim gets there.
-                    # *******************************
-                    # This would be best handled via an intervention that infects people on the assigned
-                    # day.
-                    # *******************************
-
-                    #sim.people.date_pos_test[i] = person['PositiveCollectDate']
-                    ### EDIT TO CONVERT TO DAYS NOT HOURS
-                    #date_exposed = person['PositiveCollectDate'] - int(sim.people.labTestEveryNHours[i] / 2 / 24)
-                    # Was this exposure date at or after the start of the simulation?
-                    #if date_exposed < 0:
-                    #    sim.people.date_exposed[i] = np.nan 
-                    #else:
-                    #    sim.people.date_exposed[i] = date_exposed
-                    pass
-            if person['RecoverDate'] != None:
-                # They have a recovery date.   
-                #if person['RecoverDate'] < 0:
-                #    sim.people.date_recovered[i] = np.nan 
-                #else:
-                sim.people.date_recovered[i] = person['RecoverDate']
-                # And make sure that covasim knows they recovered
+        #if info_id == 29291593 or info_id == 84647777:
+           # import pdb ; pdb.set_trace()
+        if info_id not in id_data:
+            print('ERROR: full_info_id %s not found in %s' % (info_id,info_file))
+            continue
+        person = id_data[info_id]
+      #  if info_id in [65935813,68010672,37193827,48329725,49565605,81750892,21770599,8229702,38514883,20650052,77796987,35929011,28734178,55063759,5794690,75546959,26765112,17003171,81983713,38598601,15315816,94985537,88255084,73643197,73157520,70877010,68719261,84647777,1156953,62783374,92697665,74065503,35086800,47876837,44956642,16891276,79036276,26883878,55471242,24568483,96180673,97892762,47015625,83650710,]:
+      #      import pdb ; pdb.set_trace()
+        count += 1
+        # Guard each with an if statement - missing dates are None values in 
+        # the id_data dictionaries
+        if person['PositiveCollectDate'] != None:
+            # If there's a positive collection date before the start of the simulation 
+            # set it to nan so it will be ignored.
+           # if person['PositiveCollectDate'] < 0:
+           #     sim.people.date_pos_test[i] = np.nan 
+            # Check when they were positive. If more than 14 days
+            # before the start date then mark as recovered.
+            # This is copied from people.infect(). This person needs to be offically
+            # infected. We'll use asymptomatic for the import.
+            dur_asym2rec = cvu.sample(**sim.pars['dur']['asym2rec'], size=1)
+            date_recovered = person['PositiveCollectDate'] + dur_asym2rec 
+            # If the positive collection date is too far past OR their recovery 
+            # date ends up being before the simulation has started, set them as
+            # recovered.
+            if person['PositiveCollectDate'] <= -sim.pars['quar_period'] or date_recovered < 0:
                 sim.people.recovered[i]   = True
+                sim.people.susceptible[i] = False
                 sim.people.exposed[i]     = False
                 sim.people.infectious[i]  = False
                 sim.people.symptomatic[i] = False
                 sim.people.severe[i]      = False
                 sim.people.critical[i]    = False
-                sim.people.diagnosed[i]   = False
+                sim.people.quarantined[i]   = False
+                sim.people.symptomatic[i]   = False
+                # Set the recovery date to nan so it will be ignored in covasim stats
+                sim.people.date_recovered[i] = -sim.pars['quar_period'] #np.nan   
+            elif person['PositiveCollectDate'] > -sim.pars['quar_period'] \
+                and person['PositiveCollectDate'] <= 0:
+                sim.people.date_pos_test[i] = person['PositiveCollectDate']
+                sim.people.exposed[i]     = True
+                sim.people.diagnosed[i]   = True   
+                sim.people.severe[i]      = False  # assumption 
+                sim.people.critical[i]    = False  # assumption
+                sim.people.infectious[i]  = True   # assumption
+                sim.people.recovered[i]   = False
+                sim.people.quarantined[i]   = False                     
+
+                # Estimated date they recover
+                sim.people.date_recovered[i] = date_recovered
+                # Maybe the exposure date should be half the test interval plus the days it takes
+                # for a test to be positive.
+                date_exposed = person['PositiveCollectDate'] - int(sim.people.labTestEveryNHours[i] / 2 / 24)
+                sim.people.date_exposed[i] = date_exposed
+            elif person['PositiveCollectDate'] > 0: 
+                # They're going to get a positive collection date when the sim gets there.
+                # *******************************
+                # This would be best handled via an intervention that infects people on the assigned
+                # day.
+                # *******************************
+
+                #sim.people.date_pos_test[i] = person['PositiveCollectDate']
+                ### EDIT TO CONVERT TO DAYS NOT HOURS
+                #date_exposed = person['PositiveCollectDate'] - int(sim.people.labTestEveryNHours[i] / 2 / 24)
+                # Was this exposure date at or after the start of the simulation?
+                #if date_exposed < 0:
+                #    sim.people.date_exposed[i] = np.nan 
+                #else:
+                #    sim.people.date_exposed[i] = date_exposed
+                pass
+        if person['RecoverDate'] != None:
+            sim.people.date_recovered[i] = person['RecoverDate']
+            # And make sure that covasim knows they recovered
+            sim.people.recovered[i]   = True
+            sim.people.exposed[i]     = False
+            sim.people.infectious[i]  = False
+            sim.people.symptomatic[i] = False
+            sim.people.severe[i]      = False
+            sim.people.critical[i]    = False
+            sim.people.diagnosed[i]   = False
+            sim.people.quarantined[i] = False
+        if person['LastTestCollectDate'] != None:
+                sim.people.date_tested[i] = person['LastTestCollectDate']
+        if person['DiagnoseDate'] != None:
+                sim.people.date_diagnosed[i] = person['DiagnoseDate']
+
+        if person['LatestSymptomaticDate'] != None:
+         #   if person['LatestSymptomaticDate'] < 0:
+         #       sim.people.date_symptomatic[i] = person['LatestSymptomaticDate']
+         #   else:
+                sim.people.date_symptomatic[i] = person['LatestSymptomaticDate']
+        if person['EndQuarantineDate'] != None:
+            if person['EndQuarantineDate'] < 0:
+                sim.people.date_end_quarantine[i] = person['EndQuarantineDate']
+                # NO date_end_quarantine set here - this person left before
+                # the start of the simulation so leave that value be.
                 sim.people.quarantined[i] = False
-            if person['LastTestCollectDate'] != None:
-               # if person['LastTestCollectDate'] < 0:
-              #      sim.people.date_tested[i] = person['LastTestCollectDate']
-              #  else:
-                    sim.people.date_tested[i] = person['LastTestCollectDate']
-            if person['DiagnoseDate'] != None:
-             #   if person['DiagnoseDate'] < 0:
-             #       sim.people.date_diagnosed[i] = person['DiagnoseDate']
-             #   else:
-                    sim.people.date_diagnosed[i] = person['DiagnoseDate']
-    
-            if person['LatestSymptomaticDate'] != None:
-             #   if person['LatestSymptomaticDate'] < 0:
-             #       sim.people.date_symptomatic[i] = person['LatestSymptomaticDate']
-             #   else:
-                    sim.people.date_symptomatic[i] = person['LatestSymptomaticDate']
-            if person['EndQuarantineDate'] != None:
-                if person['EndQuarantineDate'] < 0:
-                    sim.people.date_end_quarantine[i] = person['EndQuarantineDate']
-                    # NO date_end_quarantine set here - this person left before
-                    # the start of the simulation so leave that value be.
-                    sim.people.quarantined[i] = False
-                else:
-                    sim.people.date_end_quarantine[i] = person['EndQuarantineDate']
-                    sim.people.quarantined[i] = True
-            if person['DateKnownContact'] != None:
-                sim.people.known_contact[i] = True
-                # If they have not tested positive
-                if person['PositiveCollectDate'] is None:
-                    # They're not positive
-                    sim.people.date_known_contact[i] = person['DateKnownContact']
-                    # Quarantine them IF their quarantine started < 14 days ago
-                    if person['DateKnownContact'] > -sim.pars['quar_period']:
-                        if person['DateKnownContact'] == 0:
-                            # On the start day use the built-in mechanism to quarantine someone.
-                            sim.people.schedule_quarantine([i], start_date=person['DateKnownContact'])
-                        else:
-                            sim.people.quarantined[i] = True 
-                        # And set their end quarantine day 
-                        sim.people.date_end_quarantine[i] = person['DateKnownContact'] + sim.pars['quar_period']
-                # Otherwise they're best handled as someone who was positive.
-              #  else:
-              #      if person['DateKnownContact'] <= -sim.pars['quar_period'] and     \
-              #          not( person['PositiveCollectDate'] > -sim.pars['quar_period'] \
-              #               and person['PositiveCollectDate'] < 0):
-              #              sim.people.quarantined[i] = True
-                    # Set the recovery date to nan so it will be ignored in covasim stats
-            if person['DateOfDeath'] != None:
-                #wif person['DateOfDeath'] < 0:
-                    sim.people.date_dead[i] = person['DateOfDeath']
-                    sim.people.exposed[i]     = False
-                    sim.people.infectious[i]  = False
-                    sim.people.symptomatic[i] = False
-                    sim.people.severe[i]      = False
-                    sim.people.critical[i]    = False
-                    sim.people.recovered[i]   = False
-                    sim.people.dead[i]        = True      
-             #   else:
-             #       sim.people.date_dead[i] = person['DateOfDeath']  
-        except Exception as e:
-            print("Error for person %s: %s" % (info_id,e))
-            
+            else:
+                sim.people.date_end_quarantine[i] = person['EndQuarantineDate']
+                sim.people.quarantined[i] = True
+        if person['DateKnownContact'] != None:
+            sim.people.known_contact[i] = True
+            # If they have not tested positive
+            if person['PositiveCollectDate'] is None:
+                # They're not positive
+                sim.people.date_known_contact[i] = person['DateKnownContact']
+                # Quarantine them IF their quarantine started < 14 days ago
+                if person['DateKnownContact'] > -sim.pars['quar_period']:
+                    if person['DateKnownContact'] == 0:
+                        # On the start day use the built-in mechanism to quarantine someone.
+                        sim.people.schedule_quarantine([i], start_date=person['DateKnownContact'])
+                    else: 
+                        # Use schedule_quarantine but reduce the period from the default because they started
+                        # quarantine before the simuation started.
+                        quar_days = person['DateKnownContact'] + sim.pars['quar_period']
+                        sim.people.schedule_quarantine([i], start_date=0,period = quar_days)
+                        #  self.date_end_quarantine[ind] = max(self.date_end_quarantine[ind], end_day) # Extend quarantine if required
+                        # # quarantine manually
+                        # sim.people.quarantined[i] = True 
+                        # # And set their end quarantine day 
+                        # sim.people.date_end_quarantine[i] = 0 #person['DateKnownContact'] + sim.pars['quar_period']
+        if person['DateOfDeath'] != None:
+                sim.people.date_dead[i] = person['DateOfDeath']
+                sim.people.exposed[i]     = False
+                sim.people.infectious[i]  = False
+                sim.people.symptomatic[i] = False
+                sim.people.severe[i]      = False
+                sim.people.critical[i]    = False
+                sim.people.recovered[i]   = False
+                sim.people.dead[i]        = True      
+         #   else:
+         #       sim.people.date_dead[i] = person['DateOfDeath']  
+    print('Adjusted: %s' % count)
+    pass
             
