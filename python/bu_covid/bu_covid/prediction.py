@@ -108,8 +108,6 @@ def import_community_test_info(sim, info_file):
     # quarantined, recov, date_exposed
     count = 0
     for i,info_id in enumerate(sim.people.full_info_id):
-        #if info_id == 29291593 or info_id == 84647777:
-           # import pdb ; pdb.set_trace()
         if info_id not in id_data:
             print('ERROR: full_info_id %s not found in %s' % (info_id,info_file))
             continue
