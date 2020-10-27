@@ -152,9 +152,9 @@ class BU_res_iso_count(BU_iso_count):
     def apply(self, sim):
         for ind in cv.interventions.find_day(self.days, sim.t):
             date = self.dates[ind]
-            if sim.t == 0:
-                self.snapshots[date] = 0
-                return  # 1st day no one can be isolated.
+         #   if sim.t == 0:
+         #       self.snapshots[date] = 0
+          #      return  # 1st day no one can be isolated.
             # if sim didn't start on day 0 back-fill in missing days with 0.
             if sim.t > 0 and len(self.snapshots) == 0:
                 for i in range(sim.t):
@@ -187,9 +187,10 @@ class BU_nonres_iso_count(BU_iso_count):
     def apply(self, sim):
         for ind in cv.interventions.find_day(self.days, sim.t):
             date = self.dates[ind]
-            if sim.t == 0:
-                self.snapshots[date] = 0
-                return  # 1st day no one can be isolated.            
+       #     import pdb ; pdb.set_trace()
+        #    if sim.t == 0:
+      #          self.snapshots[date] = 0
+      #          return  # 1st day no one can be isolated.            
             # if sim didn't start on day 0 back-fill in missing days with 0.
             if sim.t > 0 and len(self.snapshots) == 0:
                 for i in range(sim.t):
