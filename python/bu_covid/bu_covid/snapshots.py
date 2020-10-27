@@ -139,6 +139,7 @@ class BU_iso_count(BU_res_quarantine_count):
         at_bu = ppl.campResident > 0
         not_severe = ~ppl.severe
         not_critical = ~ppl.critical
+
         # In isolation today based on health
         iso_today_health = not_recov & alive & not_severe & not_critical & diagnosed 
         # In isolation due to iso_days waiting period

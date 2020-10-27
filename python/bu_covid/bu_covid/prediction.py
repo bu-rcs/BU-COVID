@@ -107,14 +107,13 @@ def import_community_test_info(sim, info_file):
     # to make sure they're consistent with the dates
     # quarantined, recov, date_exposed
     count = 0
+    count2 = 0 
     for i,info_id in enumerate(sim.people.full_info_id):
         if info_id not in id_data:
             print('ERROR: full_info_id %s not found in %s' % (info_id,info_file))
             continue
         person = id_data[info_id]
-      #  if info_id in [65935813,68010672,37193827,48329725,49565605,81750892,21770599,8229702,38514883,20650052,77796987,35929011,28734178,55063759,5794690,75546959,26765112,17003171,81983713,38598601,15315816,94985537,88255084,73643197,73157520,70877010,68719261,84647777,1156953,62783374,92697665,74065503,35086800,47876837,44956642,16891276,79036276,26883878,55471242,24568483,96180673,97892762,47015625,83650710,]:
-      #      import pdb ; pdb.set_trace()
-        count += 1
+        
         # Guard each with an if statement - missing dates are None values in 
         # the id_data dictionaries
         if person['PositiveCollectDate'] != None:
@@ -141,10 +140,12 @@ def import_community_test_info(sim, info_file):
                 sim.people.critical[i]    = False
                 sim.people.quarantined[i]   = False
                 sim.people.symptomatic[i]   = False
-                # Set the recovery date to nan so it will be ignored in covasim stats
-                sim.people.date_recovered[i] = -sim.pars['quar_period'] #np.nan   
+                sim.people.date_recovered[i] = np.nan  
+                sim.people.date_pos_test[i] = np.nan
+#                sim.people.date_recovered[i] = -sim.pars['quar_period'] #np.nan   
             elif person['PositiveCollectDate'] > -sim.pars['quar_period'] \
-                and person['PositiveCollectDate'] <= 0:
+                 and person['PositiveCollectDate'] <= 0:
+                # INFECTED PERSON
                 sim.people.date_pos_test[i] = person['PositiveCollectDate']
                 sim.people.exposed[i]     = True
                 sim.people.diagnosed[i]   = True   
@@ -153,14 +154,21 @@ def import_community_test_info(sim, info_file):
                 sim.people.infectious[i]  = True   # assumption
                 sim.people.recovered[i]   = False
                 sim.people.quarantined[i]   = False                     
-
                 # Estimated date they recover
                 sim.people.date_recovered[i] = date_recovered
+                sim.people.dur_disease[i] =  dur_asym2rec
+                if  person['DiagnoseDate'] != None:
+                    sim.people.date_diagnosed[i] = person['DiagnoseDate']
+                else:
+                    # No diagnose date is an error. Assign one.
+                    sim.people.date_diagnosed[i] = person['PositiveCollectDate'] + 1
                 # Maybe the exposure date should be half the test interval plus the days it takes
                 # for a test to be positive.
                 date_exposed = person['PositiveCollectDate'] - int(sim.people.labTestEveryNHours[i] / 2 / 24)
                 sim.people.date_exposed[i] = date_exposed
+                count += 1
             elif person['PositiveCollectDate'] > 0: 
+                print('future')
                 # They're going to get a positive collection date when the sim gets there.
                 # *******************************
                 # This would be best handled via an intervention that infects people on the assigned
@@ -177,9 +185,11 @@ def import_community_test_info(sim, info_file):
                 #    sim.people.date_exposed[i] = date_exposed
                 pass
         if person['RecoverDate'] != None:
-            sim.people.date_recovered[i] = person['RecoverDate']
+            # Set to 0.
+            sim.people.date_recovered[i] = 0 #person['RecoverDate']
             # And make sure that covasim knows they recovered
             sim.people.recovered[i]   = True
+            sim.people.susceptible[i]    = False
             sim.people.exposed[i]     = False
             sim.people.infectious[i]  = False
             sim.people.symptomatic[i] = False
@@ -189,9 +199,14 @@ def import_community_test_info(sim, info_file):
             sim.people.quarantined[i] = False
         if person['LastTestCollectDate'] != None:
                 sim.people.date_tested[i] = person['LastTestCollectDate']
-        if person['DiagnoseDate'] != None:
-                sim.people.date_diagnosed[i] = person['DiagnoseDate']
-
+                
+    #    if person['DiagnoseDate'] != None:
+      #      if person['PositiveCollectDate']  != None:
+     #           if person['PositiveCollectDate'] > -sim.pars['quar_period']:
+     #               count2 += 1
+     #               sim.people.date_diagnosed[i] = person['DiagnoseDate']
+     #           else:
+                    
         if person['LatestSymptomaticDate'] != None:
          #   if person['LatestSymptomaticDate'] < 0:
          #       sim.people.date_symptomatic[i] = person['LatestSymptomaticDate']
@@ -238,6 +253,5 @@ def import_community_test_info(sim, info_file):
                 sim.people.dead[i]        = True      
          #   else:
          #       sim.people.date_dead[i] = person['DateOfDeath']  
-    print('Adjusted: %s' % count)
-    pass
-            
+
+             
