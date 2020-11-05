@@ -10,8 +10,12 @@ current state of the community.
 """
 
 import numpy as np
-from .misc import make_dt
 import covasim.utils as cvu
+
+from .misc import make_dt
+from .interventions import infect_specific_people
+
+
 
 __all__ = ['import_community_test_info']
 
@@ -108,6 +112,7 @@ def import_community_test_info(sim, info_file):
     # quarantined, recov, date_exposed
     count = 0
     count2 = 0 
+    future_infect = {} # day & people directory for use with the infect_specific_people intervention
     for i,info_id in enumerate(sim.people.full_info_id):
         if info_id not in id_data:
             print('ERROR: full_info_id %s not found in %s' % (info_id,info_file))
@@ -168,16 +173,14 @@ def import_community_test_info(sim, info_file):
                 sim.people.date_exposed[i] = date_exposed
                 count += 1
             elif person['PositiveCollectDate'] > 0: 
-                print('future')
-                # They're going to get a positive collection date when the sim gets there.
-                # *******************************
-                # This would be best handled via an intervention that infects people on the assigned
-                # day.
-                # *******************************
-
-                #sim.people.date_pos_test[i] = person['PositiveCollectDate']
-                ### EDIT TO CONVERT TO DAYS NOT HOURS
-                #date_exposed = person['PositiveCollectDate'] - int(sim.people.labTestEveryNHours[i] / 2 / 24)
+                # They're going to get a positive collection date when the sim gets there. But, the
+                # best way to do this is to estimate a date_exposed and then force them to be
+                # infected on that day.
+                date_exposed = person['PositiveCollectDate'] - int(sim.people.labTestEveryNHours[i] / 2 / 24)
+                if date_exposed in future_infect:
+                    future_infect[date_exposed].append(i)
+                else:
+                    future_infect[date_exposed]= [i]
                 # Was this exposure date at or after the start of the simulation?
                 #if date_exposed < 0:
                 #    sim.people.date_exposed[i] = np.nan 
@@ -253,5 +256,10 @@ def import_community_test_info(sim, info_file):
                 sim.people.dead[i]        = True      
          #   else:
          #       sim.people.date_dead[i] = person['DateOfDeath']  
-
+    # Now check to see if there's anyone for the future infection intervention
+    if len(future_infect.keys()) > 0:
+        infect_interv = infect_specific_people(future_infect)
+        # manually initialize it.
+        infect_interv.initialize(sim)
+        sim['interventions'].append(infect_interv)
              

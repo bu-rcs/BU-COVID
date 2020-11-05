@@ -23,7 +23,7 @@ IMPORT_EXOGENOUS = np.array([0.00000000, 0.00000000, 0.28571429, 0.13222111, 0.0
 __all__=['test_post_quar', 'gen_periodic_testing_interventions','gen_large_dorm_testing_interventions',
          'test_household_when_pos','pulsed_infections_network','gen_undergrad_testing_interventions','contact_tracing_sens_spec',
          'import_infections_network','import_infections_percent_network','pulsed_infections_diffuse','gen_periodic_testing_interventions_real',
-         'IMPORT_EXOGENOUS','import_infections_exogenous_network']
+         'IMPORT_EXOGENOUS','import_infections_exogenous_network','infect_specific_people']
 
 class test_post_quar(cv.Intervention):
     '''
@@ -807,6 +807,42 @@ class contact_tracing_sens_spec(cv.Intervention):
                        sim.people.known_contact[contact_inds_noninfected] = True
                        sim.people.date_known_contact[contact_inds_noninfected]  = np.fmin(sim.people.date_known_contact[contact_inds_noninfected], sim.people.t+this_trace_time)
 
+        return
+  
+    
+class infect_specific_people(cv.Intervention):
+    '''
+    Infects a specified set of people on specified days.
+    '''
+    
+    def __init__(self, people_to_infect,  **kwargs):
+        ''' people_to_infect: A dictionary of { days: [people_id,...]}
+            days should be integers. '''
+        super().__init__(**kwargs) # Initialize the Intervention object
+        self._store_args() # Store the input arguments so the intervention can be recreated
+        self.people_to_infect = people_to_infect
+        return
+
+
+    def initialize(self, sim):
+        self.initialized = True
+        print('INFET INIT')
+        return
+
+    def apply(self, sim):
+        # Check to see if today is a day we infect some unfortunate souls
+        if not sim.t in self.people_to_infect:
+            return
+
+        # Get the list of people to infect. Call the infect() method.
+        inds = np.array(self.people_to_infect[sim.t])        
+        # Check for acute bed constraint     
+        hosp_max = sim.people.count('severe')   > sim['n_beds_hosp'] if sim['n_beds_hosp'] else False 
+        # Check for ICU bed constraint
+        icu_max  = sim.people.count('critical') > sim['n_beds_icu']  if sim['n_beds_icu']  else False 
+        # And....that's all!  The simulation will roll the dice on the
+        # people infected today as to their outcomes etc. 
+        sim.people.infect(inds=inds,hosp_max=hosp_max, icu_max=icu_max, layer='importation')
         return
     
 
