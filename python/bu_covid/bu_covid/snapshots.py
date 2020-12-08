@@ -570,7 +570,6 @@ class BU_pos_test_date_count(BU_res_quarantine_count):
     key_on_campus='on-campus'
     key_off_campus='off-campus'
     df_keys = ['sim_num','date_pos_test','on-campus-count','off-campus-count']
-    
     # overriede the apply method like the others
     def apply(self, sim):
         for ind in cv.interventions.find_day(self.days, sim.t):
@@ -579,14 +578,17 @@ class BU_pos_test_date_count(BU_res_quarantine_count):
             if sim.t > 0 and len(self.snapshots) == 0:
                 for i in range(sim.t):
                     self.snapshots[self.dates[i]] = {self.key_on_campus:0, self.key_off_campus:0}
-
-            # campResident is: 0 off campus, 1 on campus, 2 large dorm on campus
-            #sim.people.date_pos_test is the date someone tested positive
-            pos_test_today = np.full(sim.people.date_pos_test.size,False,dtype=np.bool)
-            pos_test_today[np.where(sim.people.date_pos_test==sim.t)] = True
-            # Calculate two values, one for on one for off campus
-            on_campus = np.sum(np.logical_and(pos_test_today,sim.people.campResident > 0)) 
-            off_campus = np.sum(np.logical_and(pos_test_today,sim.people.campResident == 0)) 
+            # Get the indices of everyone who is diagnosed today.
+            diag_ind = np.where(np.logical_and(np.isfinite(sim.people.date_diagnosed),sim.people.date_diagnosed==sim.t))[0]
+            # just loop thru those and count on & off campus as we go.  This could be vectorized
+            # but there's no real benefit as this list will always be small.
+            on_campus = off_campus = 0
+            for ind in diag_ind:
+                # campResident is: 0 off campus, 1 on campus, 2 large dorm on campus
+                if sim.people.campResident[ind] > 0:
+                    on_campus += 1 
+                else:
+                    off_campus += 1
             self.snapshots[date] = {self.key_on_campus:on_campus, self.key_off_campus:off_campus}
         return
     

@@ -18,9 +18,12 @@ from setuptools import setup
 # This will install the bu_covid code along with covasim 
 # from PyPI and all necessary additional libraries.
 
- 
+# The parallel calculation code requires Python 3.8.x's
+# multiprocessing.managers.sharedmemorymanager so restrict
+# to that version or newer.
 setup(name='bu_covid',
       version='0.3',
+      python_requires='>=3.8', 
       description='BU code library for use with Covasim.',
       author='BU',
       author_email='bgregor@bu.edu',

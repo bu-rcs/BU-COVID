@@ -28,12 +28,12 @@
 
 import os
 import multiprocessing as mp
-import tempfile
+from multiprocessing.managers import SharedMemoryManager
+
 import tqdm
 import sys
 import pickle
 import shutil
-import secrets
 import string
 import psutil 
 
@@ -78,56 +78,33 @@ def get_n_cores(use_physical_cores=False, cores_var='NSLOTS'):
     if cores_var in os.environ:
         ncores = int(os.environ[cores_var])
     return ncores 
+ 
 
 
-def get_random_string(length):
-    ''' Get a random string '''
-    secure_str = ''.join((secrets.choice(string.ascii_letters) for i in range(length)))
-    return secure_str
-
-
-def parfun(sim):
+def parfun(sim, shrink=False):
     ''' Function used to evaluate simulations in parallel '''
     # Reset the random seed. MUST call this with 
     # a None to generate a new seed.
     sim.set_seed(None)
     sim.run()
+    if shrink:
+        sim.shrink() # remove the People to save RAM.
     return sim 
 
 
-def run_and_pickle_sim(args):
+def unpickle_and_run_sim(args):
     ''' Run a simulation and pickle it to a file on the disk '''
-    sim, tmpdir, n, shrink = args
-    sim = parfun(sim)
-    if shrink:
-        sim.shrink() # remove the People to save RAM.
-    out_file = os.path.join(tmpdir,'sim_%s.pkl' % n)
-    with open(out_file,'wb') as f:
-        pickle.dump(sim, f, protocol = pickle.HIGHEST_PROTOCOL)
-    return out_file
+    sim_shm, shrink = args
+    # Reconstitute the sim
+    sim = pickle.loads(sim_shm.buf)
+    sim = parfun(sim, shrink)
+    return sim
 
 
-def unpickle_sims(sims_paths, disable_progress = False):
-    ''' Unpickle the sims and delete the pickled files '''
-    sims_complete = []
-    print('Unpickling completed simulations.')
-    sys.stdout.flush()
-    for sim_pkl in tqdm.tqdm(sims_paths, disable = disable_progress):
-        try:
-            with open(sim_pkl,'rb') as f:
-                sim = pickle.load(f)
-                sims_complete.append(sim)
-            os.unlink(sim_pkl)
-        except Exception as e:
-            print('Error unpickling %s' % sim_pkl)
-            print(e)
-    return sims_complete
-
-
-def gen_sims(sim, tmpdir, n_runs, shrink):
+def gen_sims(sim_shm, n_runs, shrink):
     ''' Generator for the parallel sims'''
     for i in range(n_runs):
-        yield sim, tmpdir, i, shrink
+        yield sim_shm, shrink
 
 
 def parallel_run_sims(sim,n_runs = 1, n_cores = 1, shrink = True, disable_progress = False):
@@ -143,35 +120,31 @@ def parallel_run_sims(sim,n_runs = 1, n_cores = 1, shrink = True, disable_progre
         disable_progress: Disable the progress bars.  Default False.
         
         For n_runs=1 run it does not parallelize to help with debugging.'''
-    tmpdir = os.path.join(tempfile.gettempdir(), get_random_string(16))
-    os.makedirs(tmpdir, exist_ok = True)
     sims_complete = []
     # Generator for the parallel sims.
-    try:    
-        sims_data = gen_sims(sim, tmpdir, n_runs, shrink)
+    try:
         if n_runs > 1:
             print('Running %s simulations with %s cores.' % (n_runs, n_cores))
             sys.stdout.flush()
-            # Start up the pool.  Each Python proc runs exactly 1 simulation and then
-            # gets shut down to guarantee there's no weirdness with shared lists.
-            pool = mp.Pool(n_cores,maxtasksperchild=1)
-            sims_paths = []
-            for res in tqdm.tqdm(pool.imap_unordered(run_and_pickle_sim, sims_data), total=n_runs, disable=disable_progress):
-                sims_paths.append(res)
-            pool.close()
-            pool.join()
+            # the context managers for the sharedmemorymanager and pool will
+            # automatically clean up.
+            with SharedMemoryManager() as smm:
+                sim_str = pickle.dumps(sim)
+                del sim  # save RAM
+                sim_shm = smm.SharedMemory(size=len(sim_str))
+                sim_shm.buf[:] = sim_str[:]
+                del sim_str
+                sims_data = gen_sims(sim_shm, n_runs, shrink)
+                with mp.Pool(n_cores) as pool: # maxtasksperchild=1)
+                    for res in tqdm.tqdm(pool.imap_unordered(unpickle_and_run_sim, sims_data), total=n_runs, disable=disable_progress):
+                        sims_complete.append(res)
         else:
             # Don't run in parallel - this helps with debugging 1 process
-            sims_paths = [run_and_pickle_sim( (sim, tmpdir, 0, False) )]  
-        # Gather up the completed sims
-        sims_complete = unpickle_sims(sims_paths, disable_progress)
+            sims_complete.append(parfun(sim, shrink=False))
     except Exception as e:
         print('Failure running in parallel!')
         print(e)
         raise e
-    finally:
-        # Guaranteed cleanup. Delete tmpdir.
-        shutil.rmtree(tmpdir)  
         
     print('Simulations complete.')
     return sims_complete
