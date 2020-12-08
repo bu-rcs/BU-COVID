@@ -22,7 +22,7 @@ __all__=['snapshots_to_df','get_BU_snapshots','infection_count_to_df',
          'diag2iso_count_to_df','severe_count_to_df','critical_count_to_df',
          'dead_count_to_df','diagnosed_count_to_df','recovered_count_to_df',
          'quarantined_count_to_df','quarantined_end_count_to_df','QUAR_CLEANING_DAYS',   
-         'ISO_CLEANING_DAYS','ISO_DAYS','safe_nan_compare']
+         'ISO_CLEANING_DAYS','ISO_DAYS','safe_nan_compare','BU_pos_test_date_count']
 
 import covasim as cv
 import sciris as sc
@@ -32,7 +32,7 @@ from collections import deque
 
 
 import itertools as it 
-import operator 
+import operator as op
 
 def safe_nan_compare(x,y,op):
     ''' do an operation "op" between x & y. np.nan values
@@ -127,7 +127,7 @@ class BU_iso_count(BU_res_quarantine_count):
         ''' ppl: sim.people
             sim_t: simulation day'''
         # Avoid numpy errors comparing against nan values
-        diagnosed = safe_nan_compare(ppl.date_diagnosed, sim_t, operator.le)
+        diagnosed = safe_nan_compare(ppl.date_diagnosed, sim_t, op.le)
 
         # not diagnosed 
         not_diagnosed = ~diagnosed
@@ -143,7 +143,7 @@ class BU_iso_count(BU_res_quarantine_count):
         # In isolation today based on health
         iso_today_health = not_recov & alive & not_severe & not_critical & diagnosed 
         # In isolation due to iso_days waiting period
-        iso_today_waiting = diagnosed & recov & not_severe & not_critical & safe_nan_compare(ppl.date_diagnosed, (sim_t - self.iso_days), operator.gt)
+        iso_today_waiting = diagnosed & recov & not_severe & not_critical & safe_nan_compare(ppl.date_diagnosed, (sim_t - self.iso_days), np.greater)
         return iso_today_health + iso_today_waiting
  
 class BU_res_iso_count(BU_iso_count):
@@ -364,7 +364,7 @@ class BU_diagnosed_count(BU_res_quarantine_count):
 
 class BU_recovered_count(BU_res_quarantine_count):
     ''' Snapshot the demographics of anyone who is 
-        infected on any given day '''
+        recovered on any given day '''
     def apply(self,sim):
         ppl = sim.people
         for ind in cv.interventions.find_day(self.days, sim.t):
@@ -507,7 +507,7 @@ class BU_cleaning_rooms_count(BU_iso_count):
             return
         # Now the simulation is running...carry on.
         ppl = sim.people
-        diagnosed = safe_nan_compare(ppl.date_diagnosed, sim.t, operator.le)
+        diagnosed = safe_nan_compare(ppl.date_diagnosed, sim.t, op.le)
         not_diagnosed = ~diagnosed
         # Is this the day they are released?
         quar_freedom = self.yesterday_date_end_quarantine == sim.t
@@ -537,11 +537,11 @@ class BU_cleaning_rooms_count(BU_iso_count):
         # However if they have gone to severe or critical symptoms they go immediately to the hospital
         # and leave isolation that day. 
         # 3 cases. OR them all together
-        iso_leaving_1 = safe_nan_compare(ppl.date_diagnosed, sim.t - self.iso_days, operator.eq) & (safe_nan_compare(ppl.date_recovered, sim.t, operator.le)) 
-        iso_leaving_2 = safe_nan_compare(ppl.date_diagnosed, sim.t - self.iso_days, operator.lt) & (safe_nan_compare(ppl.date_recovered, sim.t, operator.eq)) 
-        iso_leaving_3 = safe_nan_compare(ppl.date_severe, sim.t, operator.eq) | \
-                        safe_nan_compare(ppl.date_critical, sim.t, operator.eq) |  \
-                        safe_nan_compare(ppl.date_dead, sim.t, operator.eq)
+        iso_leaving_1 = safe_nan_compare(ppl.date_diagnosed, sim.t - self.iso_days, op.eq) & (safe_nan_compare(ppl.date_recovered, sim.t, op.le)) 
+        iso_leaving_2 = safe_nan_compare(ppl.date_diagnosed, sim.t - self.iso_days, op.lt) & (safe_nan_compare(ppl.date_recovered, sim.t, op.eq)) 
+        iso_leaving_3 = safe_nan_compare(ppl.date_severe, sim.t, op.eq) | \
+                        safe_nan_compare(ppl.date_critical, sim.t, op.eq) |  \
+                        safe_nan_compare(ppl.date_dead, sim.t, op.eq)
         iso_leaving = iso_leaving_1 | iso_leaving_2 | iso_leaving_3
         
         on_iso_leaving = np.sum(iso_leaving & at_bu)
@@ -561,6 +561,67 @@ class BU_cleaning_rooms_count(BU_iso_count):
         # Copy the quarantine  list  to use tomorrow.
         self.yesterday_quarantine = sim.people.quarantined.copy()
         self.yesterday_date_end_quarantine = sim.people.date_end_quarantine.copy()
+
+
+class BU_pos_test_date_count(BU_res_quarantine_count):
+    ''' Snapshot to get the daily count of people who tested positive and their
+        on or off campus residency '''
+    # specify the keys that get used in many places
+    key_on_campus='on-campus'
+    key_off_campus='off-campus'
+    df_keys = ['sim_num','date_pos_test','on-campus-count','off-campus-count']
+    
+    # overriede the apply method like the others
+    def apply(self, sim):
+        for ind in cv.interventions.find_day(self.days, sim.t):
+            date = self.dates[ind]
+            # if sim didn't start on day 0 back-fill in missing days with 0.
+            if sim.t > 0 and len(self.snapshots) == 0:
+                for i in range(sim.t):
+                    self.snapshots[self.dates[i]] = {self.key_on_campus:0, self.key_off_campus:0}
+
+            # campResident is: 0 off campus, 1 on campus, 2 large dorm on campus
+            #sim.people.date_pos_test is the date someone tested positive
+            pos_test_today = np.full(sim.people.date_pos_test.size,False,dtype=np.bool)
+            pos_test_today[np.where(sim.people.date_pos_test==sim.t)] = True
+            # Calculate two values, one for on one for off campus
+            on_campus = np.sum(np.logical_and(pos_test_today,sim.people.campResident > 0)) 
+            off_campus = np.sum(np.logical_and(pos_test_today,sim.people.campResident == 0)) 
+            self.snapshots[date] = {self.key_on_campus:on_campus, self.key_off_campus:off_campus}
+        return
+    
+    def to_dict(self, sim_num=0):
+        ''' make a dictionary of lists from this set of data.
+            sim_num - simulation number for parallel runs
+        '''
+        data = {}
+        for key in self.df_keys:
+            data[key] = list() 
+        dates = sorted(list(self.snapshots.keys()))
+        for date in dates:
+            data['sim_num'].append(sim_num)
+            data['date_pos_test'].append(date)
+            data['on-campus-count'].append(self.snapshots[date][self.key_on_campus])
+            data['off-campus-count'].append(self.snapshots[date][self.key_off_campus])
+        return data
+
+    @staticmethod
+    def to_df(sims_complete):
+        ''' From a list of completed sims create a dataframe for this object'''
+        data = {}
+        for key in BU_pos_test_date_count.df_keys:
+            data[key] = list() 
+        # For each sim, find the snapshot that is this class type.  Get
+        # its data dictionary and add it to the local one.  Finally return
+        # a pandas dataframe.
+        for num,sim in enumerate(sims_complete):
+            for snap in sim['analyzers']:
+                if isinstance(snap,BU_pos_test_date_count):
+                    sim_data = snap.to_dict(num)
+                    for key in data:
+                        data[key] += sim_data[key]
+        return pd.DataFrame(data=data)
+
 
 def snapshots_to_df(sims_complete):
     ''' Take a list of completed simulations with analyzers in the 
@@ -882,5 +943,6 @@ def get_BU_snapshots(num_days, quar_cleaning_days=QUAR_CLEANING_DAYS,
             BU_recovered_count(day_lst),
             BU_quarantined_count(day_lst),
             BU_quarantined_end_count(day_lst),
-            BU_cleaning_rooms_count(day_lst, quar_cleaning_days,iso_cleaning_days,iso_days)]
+            BU_cleaning_rooms_count(day_lst, quar_cleaning_days,iso_cleaning_days,iso_days),
+            BU_pos_test_date_count(day_lst)]
     
