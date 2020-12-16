@@ -15,15 +15,14 @@ import datetime
 from .misc import make_dt, get_daynum
 from .exception import TerrierException
 import collections
-import datetime 
-
+ 
 IMPORT_EXOGENOUS = np.array([0.00000000, 0.00000000, 0.28571429, 0.13222111, 0.00000000, 0.00000000 ,0.00000000 ,0.07142857, 0.07114942,
                              0.21406296, 0.40228266, 0.60476382, 0.00000000 ,0.19232560])
 
 __all__=['test_post_quar', 'gen_periodic_testing_interventions','gen_large_dorm_testing_interventions',
          'test_household_when_pos','pulsed_infections_network','gen_undergrad_testing_interventions','contact_tracing_sens_spec',
          'import_infections_network','import_infections_percent_network','pulsed_infections_diffuse','gen_periodic_testing_interventions_real',
-         'IMPORT_EXOGENOUS','import_infections_exogenous_network','infect_specific_people']
+         'IMPORT_EXOGENOUS','import_infections_exogenous_network','infect_specific_people','contact_tracing_sens_spec_log']
 
 class test_post_quar(cv.Intervention):
     '''
@@ -769,11 +768,11 @@ class contact_tracing_sens_spec(cv.Intervention):
                    edge_inds = np.unique(np.concatenate(inds_list)) # Find all edges
                 
                 # Find all infected contacts
-                   edge_inds_infected = np.array([],dtype=np.int32)
+                   edge_inds_infected = [] #np.array([],dtype=np.int32)
                    for x,y in enumerate(edge_inds):
                        if not sim.people.susceptible[y]:
-                           edge_inds_infected = np.append(edge_inds_infected,y)
-                
+                           edge_inds_infected.append(y) # = np.append(edge_inds_infected,y)
+                   edge_inds_infected = np.array(edge_inds_infected, dtype=np.int32)
 
                 # Check contacts
                    contact_inds_infected = cvu.binomial_filter(this_trace_sensitivity, edge_inds_infected) # Filter the indices according to the probability of being able to trace this layer
@@ -781,7 +780,7 @@ class contact_tracing_sens_spec(cv.Intervention):
                        sim.people.known_contact[contact_inds_infected] = True
                        sim.people.date_known_contact[contact_inds_infected]  = np.fmin(sim.people.date_known_contact[contact_inds_infected], sim.people.t+this_trace_time)
 
-           traceable_layers = {k:v for k,v in self.trace_specificity.items() if v != 1.} # Only trace if there's a non-zero tracing probability
+           traceable_layers = {k:v for k,v in self.trace_specificity.items() if v != 0.} # Only trace if there's a non-zero tracing probability
            for lkey,this_trace_specificity in traceable_layers.items():
                if sim.people.pars['beta_layer'][lkey]: # Skip if beta is 0 for this layer
                    this_trace_time = self.trace_time[lkey]
@@ -795,11 +794,11 @@ class contact_tracing_sens_spec(cv.Intervention):
                 
 
                 # Find all not infected contacts
-                   edge_inds_noninfected = np.array([],dtype=np.int32)
+                   edge_inds_noninfected = [] #np.array([],dtype=np.int32)
                    for x,y in enumerate(edge_inds):
                        if sim.people.susceptible[y]:
-                           edge_inds_noninfected = np.append(edge_inds_noninfected,y)
-
+                           edge_inds_noninfected.append(y) # = np.append(edge_inds_noninfected,y)
+                   edge_inds_noninfected = np.array(edge_inds_noninfected)
                 # Check contacts
                    contact_inds_noninfected = cvu.binomial_filter(1-this_trace_specificity, edge_inds_noninfected) # Filter the indices according to the probability of being able to trace this layer                                               
      
@@ -809,7 +808,143 @@ class contact_tracing_sens_spec(cv.Intervention):
 
         return
   
-    
+  
+
+class contact_tracing_sens_spec_log(contact_tracing_sens_spec):
+    ''' modified, non-vectorized version of contact_tracing_sens_spec that
+        creates a per-person contact tracing log per day.  Slower and uses
+        a wee bit more memory, but required for the BU_quarantine_network_count snapshot.
+        
+        Adds the quarantining of those who are contact traced. This is a complete replacement for 
+        the regular covasim contact_trace() intervention.
+        '''
+    def __init__(self, trace_sensitivity=None, trace_specificity=None, trace_time=None, start_day=0, end_day=None, presumptive=False, **kwargs):
+        super().__init__(**kwargs) # Initialize the parent object
+        # Every day the intervention runs record all contact tracing.  This is
+        # a dictionary indexed by day number.
+        self.contact_log = {}
+        
+        
+    def apply(self, sim):
+        t = sim.t
+        if t < self.start_day:
+            return
+        elif self.end_day is not None and t > self.end_day:
+            return
+
+        # Figure out whom to test and trace
+        if not self.presumptive:
+            trace_from_inds = cvu.true(sim.people.date_diagnosed == t) # Diagnosed this time step, time to trace
+        else:
+            just_tested = cvu.true(sim.people.date_tested == t) # Tested this time step, time to trace
+            trace_from_inds = cvu.itruei(sim.people.exposed, just_tested) # This is necessary to avoid infinite chains of asymptomatic testing
+
+        contact_dt = {}
+        if trace_from_inds.size == 0: 
+            return # nothing to do
+        # If there are any just-diagnosed people, go trace their contacts
+        traceable_layers = {k:v for k,v in self.trace_sensitivity.items() if v != 0.} # Only trace if there's a non-zero tracing probability
+
+        for lkey,this_trace_sensitivity in traceable_layers.items():
+           if sim.people.pars['beta_layer'][lkey] == 0: 
+                # Skip if beta is 0 for this layer
+                continue
+           this_trace_time = self.trace_time[lkey]
+
+           # Find all the contacts of these people. Non-vectorized search.
+           inds_list = []
+           for k1,k2 in [['p1','p2'],['p2','p1']]: # Loop over the contact network in both directions -- k1,k2 are the keys
+               for ti in trace_from_inds:
+                   if ti not in contact_dt:
+                       contact_dt[ti]={'all':[],'contacts':[]}
+                   in_k1 = np.isin(sim.people.contacts[lkey][k1], [ti]).nonzero()[0] # Get all the indices of the pairs that each person is 
+                   tmp = sim.people.contacts[lkey][k2][in_k1] # Find their pairing partner
+                   if tmp.size > 0:
+                       contact_dt[ti]['all'] += list(np.unique(tmp))
+                   inds_list.append(tmp) 
+           edge_inds = np.unique(np.concatenate(inds_list)) # Find all edges
+        
+           
+           # Find all infected contacts
+           edge_inds_infected = [] #np.array([],dtype=np.int32)
+           for x,y in enumerate(edge_inds):
+               if not sim.people.susceptible[y]:
+                   edge_inds_infected.append(y) # = np.append(edge_inds_infected,y)
+           edge_inds_infected = np.array(edge_inds_infected, dtype=np.int32)
+
+           # Check contacts
+           contact_inds_infected = cvu.binomial_filter(this_trace_sensitivity, edge_inds_infected) # Filter the indices according to the probability of being able to trace this layer
+           if len(contact_inds_infected):
+               sim.people.known_contact[contact_inds_infected] = True
+               sim.people.date_known_contact[contact_inds_infected]  = np.fmin(sim.people.date_known_contact[contact_inds_infected], sim.people.t+this_trace_time)
+               # Schedule quarantine for the notified people to start on the date they will be notified. Note that the quarantine duration is based on the time since last contact, rather than time since notified
+               sim.people.schedule_quarantine(contact_inds_infected, sim.t+this_trace_time, sim.people.pars['quar_period']-this_trace_time) 
+               
+               # Take the contact_inds_infected. For each person in contact_dt check their contact list to see if someone
+               # was contacted. If so add that person to their contact_inf list.
+               for ind in contact_dt:
+                  tmp = np.unique(np.array(contact_dt[ind]['all']))
+                  contacted = tmp[np.where(np.isin(tmp,contact_inds_infected))] 
+                  if contacted.size > 0:
+                      contact_dt[ind]['contacts'].append(contacted)
+
+        traceable_layers = {k:v for k,v in self.trace_specificity.items() if v != 0.} # Only trace if there's a non-zero tracing probability
+        
+        # Reset the "all" list on contact_dt for any existing keys
+        for ind in contact_dt:
+            contact_dt[ind]['all'] = []
+        
+        for lkey,this_trace_specificity in traceable_layers.items():
+           if sim.people.pars['beta_layer'][lkey] ==0: 
+                # Skip if beta is 0 for this layer
+                continue
+           this_trace_time = self.trace_time[lkey]
+
+           # Find all the contacts of these people
+           inds_list = []
+           for k1,k2 in [['p1','p2'],['p2','p1']]: # Loop over the contact network in both directions -- k1,k2 are the keys
+               for ti in trace_from_inds:
+                    if ti not in contact_dt:
+                        contact_dt[ti]={'all':[],'contacts':[]}
+                    in_k1 = np.isin(sim.people.contacts[lkey][k1], [ti]).nonzero()[0] # Get all the indices of the pairs that each person is 
+                    tmp = sim.people.contacts[lkey][k2][in_k1] # Find their pairing partner
+                    if tmp.size > 0:
+                        contact_dt[ti]['all'] += list(np.unique(tmp))
+                    inds_list.append(tmp) 
+           edge_inds = np.unique(np.concatenate(inds_list)) # Find all edges
+        
+
+           # Find all not infected contacts
+           edge_inds_noninfected = [] #np.array([],dtype=np.int32)
+           for x,y in enumerate(edge_inds):
+               if sim.people.susceptible[y]:
+                   edge_inds_noninfected.append(y) # = np.append(edge_inds_noninfected,y)
+           edge_inds_noninfected = np.array(edge_inds_noninfected)
+           # Check contacts
+           contact_inds_noninfected = cvu.binomial_filter(1-this_trace_specificity, edge_inds_noninfected) # Filter the indices according to the probability of being able to trace this layer                                               
+ 
+           if len(contact_inds_noninfected):
+               sim.people.known_contact[contact_inds_noninfected] = True
+               sim.people.date_known_contact[contact_inds_noninfected]  = np.fmin(sim.people.date_known_contact[contact_inds_noninfected], sim.people.t+this_trace_time)
+               sim.people.schedule_quarantine(contact_inds_noninfected, sim.t+this_trace_time, sim.people.pars['quar_period']-this_trace_time) 
+
+               # Take the contact_inds_noninfected. For each person in contact_dt check their contact list to see if someone
+               # was contacted. If so add that person to their contact_inf list.
+               for ind in contact_dt:
+                  tmp = np.unique(np.array(contact_dt[ind]['all']))
+                  contacted = tmp[np.where(np.isin(tmp,contact_inds_noninfected))] 
+                  if contacted.size > 0:
+                      contact_dt[ind]['contacts'].append(contacted)
+                      
+        # Strip the "all" list from the contact_dt as it's no longer needed.
+        for ind in contact_dt:
+            del contact_dt[ind]['all']
+
+        # Append today's contact_dt to the contact_log
+        self.contact_log[sim.t] = contact_dt
+        return    
+
+  
 class infect_specific_people(cv.Intervention):
     '''
     Infects a specified set of people on specified days.

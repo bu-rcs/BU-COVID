@@ -22,7 +22,8 @@ __all__=['snapshots_to_df','get_BU_snapshots','infection_count_to_df',
          'diag2iso_count_to_df','severe_count_to_df','critical_count_to_df',
          'dead_count_to_df','diagnosed_count_to_df','recovered_count_to_df',
          'quarantined_count_to_df','quarantined_end_count_to_df','QUAR_CLEANING_DAYS',   
-         'ISO_CLEANING_DAYS','ISO_DAYS','safe_nan_compare','BU_pos_test_date_count']
+         'ISO_CLEANING_DAYS','ISO_DAYS','safe_nan_compare','BU_pos_test_date_count',
+         'BU_quarantine_network_count']
 
 import covasim as cv
 import sciris as sc
@@ -30,9 +31,10 @@ import numpy as np
 import pandas as pd
 from collections import deque
 
-
 import itertools as it 
 import operator as op
+
+from .interventions import contact_tracing_sens_spec_log
 
 def safe_nan_compare(x,y,op):
     ''' do an operation "op" between x & y. np.nan values
@@ -396,25 +398,25 @@ class BU_recovered_count(BU_res_quarantine_count):
                         
 class BU_quarantined_count(BU_res_quarantine_count):
     ''' Snapshot the demographics of anyone who is 
-        infected on any given day '''
+        quarantined on any given day '''
     def apply(self,sim):
         ppl = sim.people
         for ind in cv.interventions.find_day(self.days, sim.t):
             date = self.dates[ind]
             # They're diagnosed today if their diagnosis date equals today's date.
             #today_diag = np.where(ppl.date_diagnosed.astype(np.int32) == sim.t)
-            today_diag = np.where(ppl.date_quarantined.astype(np.int32) == sim.t)
+            today_quar = np.where(ppl.date_quarantined.astype(np.int32) == sim.t)
             # This stores several quantities on each date:
             # list of ages of infected
             # list of group (student/faculty/etc)
             # etc. Only store them if there is something found.
-            if len(today_diag[0]) > 0:
+            if len(today_quar[0]) > 0:
                 self.snapshots[date] = {}
-                self.snapshots[date]['age'] = ppl.age[today_diag]
-                self.snapshots[date]['test_cat'] = ppl.test_cat[today_diag]
-                self.snapshots[date]['campResident'] = ppl.campResident[today_diag]
-                self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_diag]
-                self.snapshots[date]['category'] = ppl.category[today_diag]
+                self.snapshots[date]['age'] = ppl.age[today_quar]
+                self.snapshots[date]['test_cat'] = ppl.test_cat[today_quar]
+                self.snapshots[date]['campResident'] = ppl.campResident[today_quar]
+                self.snapshots[date]['full_info_id'] = ppl.full_info_id[today_quar]
+                self.snapshots[date]['category'] = ppl.category[today_quar]
  
 
 class BU_quarantined_end_count(BU_res_quarantine_count):
@@ -620,9 +622,170 @@ class BU_pos_test_date_count(BU_res_quarantine_count):
             for snap in sim['analyzers']:
                 if isinstance(snap,BU_pos_test_date_count):
                     sim_data = snap.to_dict(num)
+                    try:
+                        for key in data:
+                            data[key] += sim_data[key]
+                    except:
+                        zzzz=1
+        return pd.DataFrame(data=data)
+
+
+
+
+class BU_quarantine_network_count(BU_res_quarantine_count):
+    '''  Wenrui's description of what this is capturing:
+        For each trial, each day, we will have 6 numbers. 
+             (1) # who enter quarantine on campus who only had on campus index cases  
+             (2) # who enter quarantine on campus who only had off campus index cases  
+             (3) # who enter quarantine on campus who had both off campus and on campus index cases 
+             (4) # who enter quarantine off campus who only had on campus index cases  
+             (5) # who enter quarantine off campus who only had off campus index cases  
+             (6) # who enter quarantine off campus who had both off campus and on campus index cases (edited) 
+        
+        This is based on contact tracing info as found in the contact_tracing_sens_spec intervention class, 
+        and not on infections which is tracked in the sim.people.infection_log.
+        
+        The contact_tracing_sens_spec_log class has been modified to create a contact_log which records all daily
+        contact tracing. This snapshot will examine that on each day and lookup the residency info in the sim.people
+        object to gather its data. 
+        
+        This is sort of a combination of the BU_pos_test_date_count and BU_quarantined_count snapshots.  The apply 
+        method here will look a lot like those two mushed together. '''
+
+    # columns in the output dataframe
+    keys = ['sim_num','date_quarantined','q_on_ind_on','q_on_ind_off','q_on_ind_on_off','q_off_ind_on','q_off_ind_off','q_off_ind_on_off']
+
+    def __init__(self, interv_contact_log, days,  **kwargs):
+        ''' interv_contact_log is an object of type contact_tracing_sens_spec_log that's part of the
+            set of interventions in a simulation.'''
+        super().__init__(days, **kwargs) # Initialize the Analyzer object
+        self.disable = False
+        if not isinstance(interv_contact_log, contact_tracing_sens_spec_log):
+            print('class BU_quarantine_network_count: interv_contact_log is not an instance of class contact_tracing_sens_spec_log')
+            self.disable = True
+        self.interv_contact_log = interv_contact_log
+        
+        
+        
+        
+    def invert_contact_log(self,contact_log):
+        ''' invert the contact log so we can see the contact from each person 
+        who got them landed in quarantine. Do as a dict by day then by person
+        contacted'''
+        lut = {}
+        for day in contact_log:
+            if len(contact_log[day]) > 0:
+                day_dt = {}
+                # if there's anything here...
+                for source in contact_log[day]:
+                    t1 = contact_log[day][source]['contacts']  
+                    targets=[]
+                    for t in t1:
+                        targets += list(t)
+                    for target in targets:
+                        if target not in day_dt:
+                            day_dt[target] = []
+                        day_dt[target].append(source)
+                if len(day_dt) > 0:
+                    lut[day] = day_dt
+        return lut
+        
+    def apply(self, sim):
+        if self.disable: # wasn't initialized corretly. 
+            return
+        ppl = sim.people
+        # initialize storage for counters.
+        data = {}
+        for k in self.keys:
+            data[k] = 0
+         # if sim didn't start on day 0 back-fill in missing days with 0.
+        if sim.t > 0 and len(self.snapshots) == 0:
+            for i in range(sim.t):
+                self.snapshots[self.dates[i]] = data.copy()           
+        for ind in cv.interventions.find_day(self.days, sim.t):
+            date = self.dates[ind]
+            # Get the indices of everyone who is going into quarantine today.
+            today_quar = np.where(ppl.date_quarantined.astype(np.int32) == sim.t)[0]
+            
+            if len(today_quar) > 0:
+                # Transform the intervention contact log.  Right now on this day it's
+                # the list of people contacted in response to someone's positive test. That
+                # needs to be inverted.
+                contact_lut = self.invert_contact_log(self.interv_contact_log.contact_log)
+                contact_days = sorted(list(contact_lut.keys()), reverse=True)
+                # For each person quarantined today, search backwards in the contact_lut
+                # to find the sources that put them into quarantine.
+                targ_src = {}
+                for targ in today_quar:
+                    for day in contact_days:
+                        if targ in contact_lut[day]:
+                            targ_src[targ] = contact_lut[day][targ] # sources that made this person get quarantined
+                            break # stop looking at dates for this target.
+                # Now build up the data for today.
+                for targ in targ_src:
+                    if ppl.campResident[targ_src[targ]].size > 0:
+                        # on campus target and there exist sources
+                        if ppl.campResident[targ] > 0: 
+                            # Sources all on campus?
+                            if np.all(ppl.campResident[targ_src[targ]] > 0):
+                                data['q_on_ind_on'] += 1
+                            elif np.all(ppl.campResident[targ_src[targ]] < 1):
+                                # Sources all off campus
+                                data['q_on_ind_off'] += 1
+                            else:
+                                # it's a mix!
+                                data['q_on_ind_on_off'] += 1
+                        else: # off campus targer
+                            # Sources all on campus?
+                            if np.all(ppl.campResident[targ_src[targ]] > 0):
+                                data['q_off_ind_on'] += 1
+                            elif np.all(ppl.campResident[targ_src[targ]] < 1):
+                                # Sources all off campus
+                                data['q_off_ind_off'] += 1
+                            else:
+                                # it's a mix!
+                                data['q_off_ind_on_off'] += 1                        
+    
+            # Finally...store this day's snapshot
+            self.snapshots[date] = data
+        return
+    
+    def to_dict(self, sim_num=0):
+        ''' make a dictionary of lists from this set of data.
+            sim_num - simulation number for parallel runs
+        '''
+        data = {}
+        for key in self.keys:
+            data[key] = list() 
+        dates = sorted(list(self.snapshots.keys()))
+        for date in dates:
+            data['sim_num'].append(sim_num)
+            data['date_quarantined'].append(date)
+            data['q_on_ind_on'].append(self.snapshots[date]['q_on_ind_on'])
+            data['q_on_ind_off'].append(self.snapshots[date]['q_on_ind_off'])
+            data['q_on_ind_on_off'].append(self.snapshots[date]['q_on_ind_on_off'])
+            data['q_off_ind_on'].append(self.snapshots[date]['q_off_ind_on'])
+            data['q_off_ind_off'].append(self.snapshots[date]['q_off_ind_off'])
+            data['q_off_ind_on_off'].append(self.snapshots[date]['q_off_ind_on_off'])
+        return data
+
+    @staticmethod
+    def to_df(sims_complete):
+        ''' From a list of completed sims create a dataframe for this object'''
+        data = {}
+        for key in BU_quarantine_network_count.keys:
+            data[key] = list() 
+        # For each sim, find the snapshot that is this class type.  Get
+        # its data dictionary and add it to the local one.  Finally return
+        # a pandas dataframe.
+        for num,sim in enumerate(sims_complete):
+            for snap in sim['analyzers']:
+                if isinstance(snap,BU_quarantine_network_count):
+                    sim_data = snap.to_dict(num)
                     for key in data:
                         data[key] += sim_data[key]
         return pd.DataFrame(data=data)
+    
 
 
 def snapshots_to_df(sims_complete):
@@ -928,9 +1091,12 @@ def quarantined_end_count_to_df(sims_complete):
     
 def get_BU_snapshots(num_days, quar_cleaning_days=QUAR_CLEANING_DAYS,
                      iso_cleaning_days=ISO_CLEANING_DAYS,
-                     iso_days=ISO_DAYS):
+                     iso_days=ISO_DAYS, interv_contact_log = None):
     ''' Return a list of snapshots to be used with the simulations.  The order here
-        is specific and must match that in snapshots_to_df '''
+        is specific and must match that in snapshots_to_df 
+        
+        interv_contact_log is the contact_tracing_sens_spec_log object used in
+        the simulation interventions.'''
     day_lst = list(range(num_days))
     return [BU_res_quarantine_count(day_lst),
             BU_res_iso_count(day_lst, iso_days),
@@ -946,5 +1112,6 @@ def get_BU_snapshots(num_days, quar_cleaning_days=QUAR_CLEANING_DAYS,
             BU_quarantined_count(day_lst),
             BU_quarantined_end_count(day_lst),
             BU_cleaning_rooms_count(day_lst, quar_cleaning_days,iso_cleaning_days,iso_days),
-            BU_pos_test_date_count(day_lst)]
+            BU_pos_test_date_count(day_lst),
+            BU_quarantine_network_count(interv_contact_log, day_lst)]
     
