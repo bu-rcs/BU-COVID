@@ -717,10 +717,8 @@ class BU_quarantine_network_count(BU_res_quarantine_count):
                 # to find the sources that put them into quarantine.
                 targ_src = {}
                 for targ in today_quar:
-                    for day in contact_days:
-                        if targ in contact_lut[day]:
-                            targ_src[targ] = contact_lut[day][targ] # sources that made this person get quarantined
-                            break # stop looking at dates for this target.
+                    if targ in contact_lut[sim.t]:
+                        targ_src[targ] = contact_lut[sim.t][targ] # sources that made this person get quarantined
                 # Now build up the data for today.
                 for targ in targ_src:
                     if ppl.campResident[targ_src[targ]].size > 0:
