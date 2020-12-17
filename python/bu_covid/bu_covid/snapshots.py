@@ -655,18 +655,11 @@ class BU_quarantine_network_count(BU_res_quarantine_count):
     # columns in the output dataframe
     keys = ['sim_num','date_quarantined','q_on_ind_on','q_on_ind_off','q_on_ind_on_off','q_off_ind_on','q_off_ind_off','q_off_ind_on_off']
 
-    def __init__(self, interv_contact_log, days,  **kwargs):
+    def __init__(self, days,  **kwargs):
         ''' interv_contact_log is an object of type contact_tracing_sens_spec_log that's part of the
             set of interventions in a simulation.'''
         super().__init__(days, **kwargs) # Initialize the Analyzer object
-        self.disable = False
-        if not isinstance(interv_contact_log, contact_tracing_sens_spec_log):
-            print('class BU_quarantine_network_count: interv_contact_log is not an instance of class contact_tracing_sens_spec_log')
-            self.disable = True
-        self.interv_contact_log = interv_contact_log
-        
-        
-        
+        self.contacts_not_found = False
         
     def invert_contact_log(self,contact_log):
         ''' invert the contact log so we can see the contact from each person 
@@ -689,10 +682,24 @@ class BU_quarantine_network_count(BU_res_quarantine_count):
                 if len(day_dt) > 0:
                     lut[day] = day_dt
         return lut
+ 
+
+    def get_contact_log(self, sim):
+        ''' Find the right intervention in the sim's interventions and 
+            get the contact log.'''
+        # Loop through the interventions and find the right one.
+        for interv in sim['interventions']:
+            if isinstance(interv,contact_tracing_sens_spec_log):
+                return interv.contact_log
+        # If we got this far the correct intervention class was not 
+        # found.  Print a warning one time.
+        if not self.contacts_not_found:
+            print('Warning: BU_quarantine_network_count snapshot could not find an intervention of class contact_tracing_sens_spec_log to retrieve a contact tracing log.')
+        self.contacts_not_found = True        
+        return None
+        
         
     def apply(self, sim):
-        if self.disable: # wasn't initialized corretly. 
-            return
         ppl = sim.people
         # initialize storage for counters.
         data = {}
@@ -701,9 +708,14 @@ class BU_quarantine_network_count(BU_res_quarantine_count):
          # if sim didn't start on day 0 back-fill in missing days with 0.
         if sim.t > 0 and len(self.snapshots) == 0:
             for i in range(sim.t):
-                self.snapshots[self.dates[i]] = data.copy()           
+                self.snapshots[self.dates[i]] = data.copy()       
+        contact_log = self.get_contact_log(sim)
         for ind in cv.interventions.find_day(self.days, sim.t):
             date = self.dates[ind]
+            # Make sure that the contact log was properly retrieved
+            if not contact_log:
+                self.snapshots[date] = data
+                return
             # Get the indices of everyone who is going into quarantine today.
             today_quar = np.where(ppl.date_quarantined.astype(np.int32) == sim.t)[0]
             
@@ -711,7 +723,7 @@ class BU_quarantine_network_count(BU_res_quarantine_count):
                 # Transform the intervention contact log.  Right now on this day it's
                 # the list of people contacted in response to someone's positive test. That
                 # needs to be inverted.
-                contact_lut = self.invert_contact_log(self.interv_contact_log.contact_log)
+                contact_lut = self.invert_contact_log(contact_log)
                 contact_days = sorted(list(contact_lut.keys()), reverse=True)
                 # For each person quarantined today, search backwards in the contact_lut
                 # to find the sources that put them into quarantine.
@@ -1089,7 +1101,7 @@ def quarantined_end_count_to_df(sims_complete):
     
 def get_BU_snapshots(num_days, quar_cleaning_days=QUAR_CLEANING_DAYS,
                      iso_cleaning_days=ISO_CLEANING_DAYS,
-                     iso_days=ISO_DAYS, interv_contact_log = None):
+                     iso_days=ISO_DAYS):
     ''' Return a list of snapshots to be used with the simulations.  The order here
         is specific and must match that in snapshots_to_df 
         
@@ -1111,5 +1123,5 @@ def get_BU_snapshots(num_days, quar_cleaning_days=QUAR_CLEANING_DAYS,
             BU_quarantined_end_count(day_lst),
             BU_cleaning_rooms_count(day_lst, quar_cleaning_days,iso_cleaning_days,iso_days),
             BU_pos_test_date_count(day_lst),
-            BU_quarantine_network_count(interv_contact_log, day_lst)]
+            BU_quarantine_network_count(day_lst)]
     
