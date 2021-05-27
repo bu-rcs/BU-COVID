@@ -80,24 +80,24 @@ if 'N_SIM_RUNS' in os.environ:
 
 n_imports=1
 if 'N_IMPORTS' in os.environ:
-    n_imports = int(os.environ['N_IMPORTS'])
+    n_imports = float(os.environ['N_IMPORTS'])
     
 beta_roommate = 0.7
 if 'BETA_roommate' in os.environ:
-    beta_roommate = os.environ['BETA_roommate']
+    beta_roommate = float(os.environ['BETA_roommate'])
 
 beta_household=0.08
 if 'BETA_household' in os.environ:
-    beta_household = os.environ['BETA_household']
+    beta_household = float(os.environ['BETA_household'])
 
 beta_floor=0.03
 if 'BETA_floor' in os.environ:
-    beta_floor = os.environ['BETA_floor']
+    beta_floor = float(os.environ['BETA_floor'])
 # Make sure the plot directory exists
 
 test_sensitivity = 0.9
 if 'TEST_sensitivity' in os.environ:
-    test_sensitivity = os.environ['TEST_sensitivity']
+    test_sensitivity = float(os.environ['TEST_sensitivity'])
 
 plot_dir = os.path.join(plot_dir,sim_name)
 os.makedirs(plot_dir, exist_ok = True) 
