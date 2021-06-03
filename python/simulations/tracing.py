@@ -278,10 +278,15 @@ trace_spec['household'] = 1.0
 # Create the tracing interventions
 # This traces and quarantines roomates and households using the standard
 # covasim contact_tracing intervention
-interventions.append(cv.contact_tracing(start_day=start_day,trace_probs=trace_probs, trace_time=trace_time,presumptive=True))
+#interventions.append(cv.contact_tracing(start_day=start_day,trace_probs=trace_probs, trace_time=trace_time,presumptive=True))
 # This custom intervention does contact tracing with the specified specificity and
 # sensitivity on classmates and floormates.
-interventions.append(bu.contact_tracing_sens_spec(start_day=start_day,trace_sensitivity=trace_sens,trace_specificity=trace_spec, trace_time=trace_time,presumptive=True))
+#interventions.append(bu.contact_tracing_sens_spec(start_day=start_day,trace_sensitivity=trace_sens,trace_specificity=trace_spec, trace_time=trace_time,presumptive=True))
+
+# Add an intervention that's required by the BU_quarantine_network_count
+# snapshot
+interv_contact_trace_log = bu.contact_tracing_sens_spec_log(start_day=start_day,trace_sensitivity=trace_sens,trace_specificity=trace_spec, trace_time=trace_time,presumptive=True)
+interventions.append(interv_contact_trace_log)
 
 
 #%%
