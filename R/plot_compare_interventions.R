@@ -21,7 +21,7 @@ library(scales)
 # population size
 n_pop <- 3750
 
-# covasim output file for different intervention
+# covasim output file for different interventions
 hdir <- "../Data/results/"
 name_csv <- c("no_interventions/sim_results_no_interventions.csv",
               "classrooms/sim_results_classrooms.csv",
